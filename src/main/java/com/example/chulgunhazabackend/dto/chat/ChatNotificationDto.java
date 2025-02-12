@@ -1,6 +1,5 @@
 package com.example.chulgunhazabackend.dto.chat;
 
-import com.example.chulgunhazabackend.domain.member.Position;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -12,16 +11,16 @@ import java.io.Serializable;
 @NoArgsConstructor
 public class ChatNotificationDto implements Serializable {
 
-    public Long employeeNo;
+    public Long roomId;
 
-    public String name;
+    public Long senderEmployeeNo;
 
-    public String department;
+    public String senderName;
 
-    public Position position;
+    public Long receiverEmployeeNo;
 
-    public String message;
+    public String lastMessage;
 
-    // TODO: 채팅 방 찾는 링크 추가
+    public Long unReadMessageCount;
 
 }

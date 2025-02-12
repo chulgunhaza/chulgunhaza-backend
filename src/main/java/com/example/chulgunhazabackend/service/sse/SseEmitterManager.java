@@ -11,7 +11,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class SseEmitterManager {
 
-    // HACK : 추후 Singleton 적용 후 Config 로 분리 Manager 와 Config 를 분리해서 사용.
     private final Map<EmitterType, Map<Long, SseEmitter>> emitters = new ConcurrentHashMap<>();
 
     // INFO: Emitter type 은 Main 과 chat 2가지 입니다.
@@ -28,14 +27,15 @@ public class SseEmitterManager {
     }
 
     // INFO: chatEmitter 를 등록하고 반환하는 메서드 입니다.
-    public SseEmitter chatRegisterEmitter(Long employeeNo) {
+    // HACK: 추후 Emitter 시간 조정 필요.
+    public SseEmitter chatRegisterEmitter(Long employeeId) {
 
         SseEmitter emitter = new SseEmitter(10000000L);
-        emitters.get(EmitterType.CHAT).put(employeeNo, emitter);
-        emitter.onCompletion(() -> emitters.get(EmitterType.CHAT).remove(employeeNo));
-        emitter.onTimeout(() -> emitters.get(EmitterType.CHAT).remove(employeeNo));
+        emitters.get(EmitterType.CHAT).put(employeeId, emitter);
+        emitter.onCompletion(() -> emitters.get(EmitterType.CHAT).remove(employeeId));
+        emitter.onTimeout(() -> emitters.get(EmitterType.CHAT).remove(employeeId));
 
-        sendEmitterData(EmitterType.CHAT, emitter, employeeNo, "ChatSseConnect", "Success Chat SSE");
+        sendEmitterData(EmitterType.CHAT, emitter, employeeId, "ChatSseConnect", "Success Chat SSE");
         return emitter;
 
     }
@@ -49,8 +49,6 @@ public class SseEmitterManager {
        sendEmitterData(EmitterType.MAIN, emitter, employeeNo, "MainSseConnect", "Success Main SSE");
        return emitter;
    }
-
-
 
     // INFO: chatEmitter 를 가져오는 로직
     public SseEmitter getChatEmitter(Long employeeNo) {

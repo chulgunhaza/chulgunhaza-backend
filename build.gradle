@@ -40,6 +40,9 @@ dependencies {
     // rabbitMQ
     implementation 'org.springframework.boot:spring-boot-starter-amqp'
 
+    // websocket
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
     // serialize
     implementation 'com.fasterxml.jackson.core:jackson-databind'
 

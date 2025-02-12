@@ -21,18 +21,18 @@ public class EmployeeChatRoomServiceImpl implements EmployeeChatRoomService {
     @Override
     public Long save(ChatRoom chatRoom, Employee senderEmployee, Employee receiverEmployee) {
 
-        //senderEmployee 저장
+        // INFO : senderEmployee 저장
         employeeChatRoomRepository.save(EmployeeChatRoom.builder().chatRoom(chatRoom).employee(senderEmployee).build());
 
-        //receiverEmployee 저장
+        // INFO : receiverEmployee 저장
         employeeChatRoomRepository.save(EmployeeChatRoom.builder().chatRoom(chatRoom).employee(receiverEmployee).build());
 
         return chatRoom.getId();
     }
 
-    // 전송 사원의 아이디로 해당 사원의 채팅방 목록 가져오기
+    // INFO : 전송 사원의 아이디로 해당 사원의 채팅방 목록 가져오기
     @Override
     public Page<EmployeeChatRoom> findByEmployeeId(Long employeeId, Pageable pageable) {
-        return employeeChatRoomRepository.findByEmployeeId(employeeId, pageable);
+        return employeeChatRoomRepository.findChatRoomsExcludingEmployee(employeeId, pageable);
     }
 }

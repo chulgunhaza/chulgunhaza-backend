@@ -8,7 +8,7 @@ import org.springframework.data.domain.Pageable;
 
 public interface ChatRoomService {
 
-    Long saveChatRoom(ChatRoomCreateRequestDto chatRoomCreateRequestDto);
+    Long saveChatRoom(ChatRoomCreateRequestDto chatRoomCreateRequestDto, Long employeeId);
 
     PageDto<ChatRoomListResponseDto> getAllChatRoomsByEmployeeId(Long employeeId, Pageable pageable);
 

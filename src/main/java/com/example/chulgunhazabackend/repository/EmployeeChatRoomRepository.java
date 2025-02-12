@@ -20,6 +20,11 @@ public interface EmployeeChatRoomRepository extends JpaRepository<EmployeeChatRo
             "AND ec2.employee.id = :receiverId" )
     Optional<Long> findRoomIdByEmployeeIds(@Param("senderId") Long senderId, @Param("receiverId") Long receiverId);
 
+    @Query("SELECT c FROM EmployeeChatRoom c WHERE c.chatRoom.id IN " +
+            "(SELECT cr.chatRoom.id FROM EmployeeChatRoom cr WHERE cr.employee.id = :employeeId) " +
+            "AND c.employee.id != :employeeId")
+    Page<EmployeeChatRoom> findChatRoomsExcludingEmployee(@Param("employeeId") Long employeeId, Pageable pageable);
+
     Optional<EmployeeChatRoom> findByEmployeeIdAndChatRoomId(Long employeeId, Long chatRoomId);
 
 }
