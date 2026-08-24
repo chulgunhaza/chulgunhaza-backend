@@ -35,3 +35,8 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Local dev secrets/config (do not commit) ###
+.env
+gradle.properties
+uploads/
