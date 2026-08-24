@@ -4,6 +4,7 @@ import com.example.chulgunhazabackend.security.filter.SessionCheckFilter;
 import com.example.chulgunhazabackend.security.handler.LoginSuccessHandler;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -18,11 +19,9 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @RequiredArgsConstructor
@@ -34,6 +33,13 @@ public class SecurityConfig {
     private final SessionCheckFilter sessionCheckFilter;
     private final AccessDeniedHandler accessDeniedHandler;
     private final UserDetailsService userDetailsService;
+
+    // #54: 와일드카드("*") + allowCredentials(true) 조합은 브라우저에 따라 요청이
+    // 차단되거나, 차단되지 않는 환경에서는 임의 origin이 세션 쿠키를 실어 보낼 수 있어
+    // 명시적 화이트리스트로 좁혔다. 기본값은 로컬 프론트 개발 서버(localhost:3000),
+    // 운영 환경에서는 CORS_ALLOWED_ORIGINS 환경변수(콤마 구분)로 덮어쓴다.
+    @Value("${cors.allowed-origins}")
+    private List<String> allowedOrigins;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -123,16 +129,7 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration corsConfiguration = new CorsConfiguration();
-        corsConfiguration.setAllowedOriginPatterns(Arrays.asList("*")); //TODO: "http://localhost:3000 추가
-        corsConfiguration.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type"));
-        corsConfiguration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"));
-        corsConfiguration.setAllowCredentials(true); // 헤더 쿠키 허용
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", corsConfiguration);
-
-        return source;
+        return new AppCorsConfigurationSource(allowedOrigins);
     }
 
 }
