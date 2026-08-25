@@ -38,7 +38,15 @@ public interface EmployeeChatRoomRepository extends JpaRepository<EmployeeChatRo
 
     // INFO : 이 사람이 이 방을 읽었다고(=messageId까지는 다 봤다고) 표시. 이미 그보다 최신
     // 지점까지 읽은 상태라면(다른 탭에서 먼저 읽었다든가) 뒤로 되돌리지 않는다.
-    @Modifying
+    // clearAutomatically = true 가 핵심이다 — 이게 없으면, 이 UPDATE 이전에 같은 트랜잭션
+    // 안에서 이미 로딩된 EmployeeChatRoom(예: getChatMessagesByRoomId에서 이전 읽음 지점을
+    // 확인하려고 findByEmployeeIdAndChatRoomId로 미리 조회한 것)이 영속성 컨텍스트(1차 캐시)에
+    // 갱신 전 값 그대로 남아있는다. 그 상태로 바로 이어서 findByChatRoomId를 불러도 DB가 아니라
+    // 그 캐시된(오래된) 엔티티를 그대로 돌려줘서, 방금 읽음 처리한 "나 자신"의 lastReadMessageId가
+    // 안 바뀐 것처럼 보여 "메시지별 안읽은 인원 수" 실시간 갱신이 하나씩 밀려서 나오는 버그가
+    // 있었다(읽음 실시간 알림 붙이다가 실측으로 발견) — clearAutomatically로 벌크 업데이트 직후
+    // 영속성 컨텍스트를 비워서 이후 조회가 항상 DB를 다시 보게 만든다.
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE EmployeeChatRoom e SET e.lastReadMessageId = :messageId " +
             "WHERE e.employee.id = :employeeId AND e.chatRoom.id = :roomId " +
             "AND (e.lastReadMessageId IS NULL OR e.lastReadMessageId < :messageId)")

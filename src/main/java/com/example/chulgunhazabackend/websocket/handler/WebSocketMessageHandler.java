@@ -72,8 +72,15 @@ public class WebSocketMessageHandler implements WebSocketHandler {
             Authentication authentication = securityContext.getAuthentication();
             if (authentication != null) {
                 EmployeeCredentialDto credentialDto = (EmployeeCredentialDto) authentication.getPrincipal();
-                sessions.remove(credentialDto.getEmployeeNo()); // 세션 종료 시 제거
-                log.info("WebSocket connection closed for user: {}", credentialDto.getEmployeeNo());
+                // INFO : sessions 맵은 employee "id"(PK)로 저장한다(afterConnectionEstablished,
+                // subscribeToChatRoom, getSession 전부 getId() 사용). 여기만 getEmployeeNo()로
+                // 지우고 있어서 — id != employeeNo(항상 10000000 차이) — 연결이 끊겨도 세션이
+                // 맵에서 절대 안 지워지는 버그였다. 그 결과 이미 끊긴(닫힌) 세션 참조가
+                // 계속 남아있다가, 나중에 그 참조로 메시지를 보내려 하면
+                // "세션이 이미 닫혔다"는 IllegalStateException으로 요청 전체가 500 났다
+                // (읽음 실시간 알림 기능 붙이다가 실측으로 발견).
+                sessions.remove(credentialDto.getId());
+                log.info("WebSocket connection closed for user: {}", credentialDto.getId());
             }
         }
     }
@@ -122,5 +129,16 @@ public class WebSocketMessageHandler implements WebSocketHandler {
             return null;
         }
         return webSocketSession;
+    }
+
+    // INFO : 세션으로 메시지 전송을 시도했는데 이미 닫혀 있어서 실패했을 때, 그 stale
+    // 참조를 맵에서 지우는 자기치유용 메서드. afterConnectionClosed가 정상 동작하면
+    // 원래는 필요 없어야 하지만, 클라이언트가 정상 종료 핸드셰이크 없이 뚝 끊기는
+    // 경우(네트워크 끊김 등)까지 대비해서 방어적으로 둔다.
+    public void removeSession(Long userId, Long roomId) {
+        ConcurrentHashMap<Long, WebSocketSession> userSessions = sessions.get(userId);
+        if (userSessions != null) {
+            userSessions.remove(roomId);
+        }
     }
 }

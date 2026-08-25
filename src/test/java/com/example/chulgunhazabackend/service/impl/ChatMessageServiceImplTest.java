@@ -10,6 +10,8 @@ import com.example.chulgunhazabackend.repository.ChatMessageRepository;
 import com.example.chulgunhazabackend.repository.ChatRoomRepository;
 import com.example.chulgunhazabackend.repository.EmployeeChatRoomRepository;
 import com.example.chulgunhazabackend.repository.EmployeeRepository;
+import com.example.chulgunhazabackend.websocket.handler.WebSocketMessageHandler;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,6 +51,10 @@ class ChatMessageServiceImplTest {
     private EmployeeRepository employeeRepository;
     @Mock
     private EmployeeChatRoomRepository employeeChatRoomRepository;
+    @Mock
+    private WebSocketMessageHandler webSocketMessageHandler;
+    @Mock
+    private ObjectMapper objectMapper;
 
     @InjectMocks
     private ChatMessageServiceImpl chatMessageService;
@@ -137,6 +143,50 @@ class ChatMessageServiceImplTest {
 
         ChatMessageListResponseDto dto = result.getContents().get(0);
         assertThat(dto.getUnReadCount()).isEqualTo(0L);
+    }
+
+    @Test
+    @DisplayName("방을 읽으면 실시간 접속 중인 다른 참여자에게 갱신된 안읽은 인원 수를 WebSocket으로 즉시 push한다")
+    void 읽으면_실시간으로_다른_참여자에게_알림이_간다() throws Exception {
+        Long roomId = 902L;
+        Long readerId = 1L;   // 지금 막 방을 읽는 사람
+        Long senderId = 2L;   // 메시지를 보낸 사람 (readerId가 새로 읽은 메시지의 발신자)
+
+        ChatRoom chatRoom = ChatRoom.builder().build();
+        setField(chatRoom, "id", roomId);
+
+        Employee sender = mock(Employee.class);
+        given(sender.getId()).willReturn(senderId);
+
+        ChatMessage message = ChatMessage.builder()
+                .chatRoom(chatRoom).employee(sender).message("안녕하세요").createTime(LocalDateTime.now()).build();
+        setField(message, "id", 70L);
+
+        Pageable pageable = PageRequest.of(0, 30);
+        Page<ChatMessage> messagePage = new PageImpl<>(List.of(message), pageable, 1);
+
+        EmployeeChatRoom senderMembership = employeeChatRoomOf(senderId, 999L);
+        // readerId는 이전에 60까지만 읽었다가 이번에 70까지 읽음 — (60, 70] 구간이 새로 읽힌 셈.
+        EmployeeChatRoom readerMembership = employeeChatRoomOf(readerId, 60L);
+
+        given(chatRoomRepository.findById(roomId)).willReturn(Optional.of(chatRoom));
+        given(chatMessageRepository.findByChatRoomOrderByCreatedAtDesc(chatRoom, pageable)).willReturn(messagePage);
+        given(chatMessageRepository.findMaxMessageId(roomId)).willReturn(70L);
+        given(employeeChatRoomRepository.findByEmployeeIdAndChatRoomId(readerId, roomId)).willReturn(Optional.of(readerMembership));
+        given(employeeChatRoomRepository.findByChatRoomId(roomId)).willReturn(List.of(senderMembership, readerMembership));
+        given(chatMessageRepository.findMessagesInRange(roomId, 60L, 70L)).willReturn(List.of(message));
+
+        org.springframework.web.socket.WebSocketSession senderSession = mock(org.springframework.web.socket.WebSocketSession.class);
+        given(senderSession.isOpen()).willReturn(true);
+        given(webSocketMessageHandler.getSession(senderId, roomId)).willReturn(senderSession);
+        given(objectMapper.writeValueAsString(org.mockito.ArgumentMatchers.any())).willReturn("{\"type\":\"read\"}");
+
+        chatMessageService.getChatMessagesByRoomId(roomId, readerId, pageable);
+
+        // 새로 읽힌 메시지의 발신자(접속 중)에게는 실시간 알림이 가야 하고,
+        verify(senderSession).sendMessage(org.mockito.ArgumentMatchers.any());
+        // "읽은 나"(readerId) 본인에게는 자기 자신한테 보낼 이유가 없으니 세션 조회조차 안 해야 한다.
+        org.mockito.Mockito.verify(webSocketMessageHandler, org.mockito.Mockito.never()).getSession(org.mockito.ArgumentMatchers.eq(readerId), org.mockito.ArgumentMatchers.any());
     }
 
     private EmployeeChatRoom employeeChatRoomOf(Long employeeId, Long lastReadMessageId) {

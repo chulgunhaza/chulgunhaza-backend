@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
@@ -27,5 +29,12 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     @Query("SELECT COUNT(m) FROM ChatMessage m WHERE m.chatRoom.id = :roomId AND m.employee.id <> :employeeId " +
             "AND (:lastReadMessageId IS NULL OR m.id > :lastReadMessageId)")
     long countUnread(@Param("roomId") Long roomId, @Param("employeeId") Long employeeId, @Param("lastReadMessageId") Long lastReadMessageId);
+
+    // INFO : 누군가 방을 읽어서 lastReadMessageId가 (from, to] 구간만큼 전진했을 때, 그
+    // 구간에 걸리는(= 이번에 새로 "읽힌" 것으로 바뀐) 메시지들. 이걸 실시간 읽음 알림
+    // (WebSocket) 대상으로 삼아서 "메시지별 안읽은 인원 수"를 즉시 갱신해준다.
+    @Query("SELECT m FROM ChatMessage m WHERE m.chatRoom.id = :roomId " +
+            "AND (:fromMessageId IS NULL OR m.id > :fromMessageId) AND m.id <= :toMessageId")
+    List<ChatMessage> findMessagesInRange(@Param("roomId") Long roomId, @Param("fromMessageId") Long fromMessageId, @Param("toMessageId") Long toMessageId);
 
 }

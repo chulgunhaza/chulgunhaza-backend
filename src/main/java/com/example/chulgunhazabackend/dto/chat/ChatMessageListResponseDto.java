@@ -12,6 +12,10 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class ChatMessageListResponseDto {
 
+    // INFO : 실시간 읽음 알림(WebSocket read 이벤트)에서 "어떤 메시지가 읽혔는지" 매칭하려면
+    // 프론트가 메시지 id를 들고 있어야 해서 추가했다.
+    private Long messageId;
+
     private Long senderId;
 
     private String message;
@@ -28,7 +32,8 @@ public class ChatMessageListResponseDto {
 
     public static ChatMessageListResponseDto fromEntity(ChatMessage chatMessage, long unReadCount) {
         return new ChatMessageListResponseDto(
-                chatMessage.getEmployee().getId()
+                chatMessage.getId()
+                , chatMessage.getEmployee().getId()
                 , chatMessage.getMessage()
                 , chatMessage.getChatRoom().getId()
                 , chatMessage.getCreateTime()
