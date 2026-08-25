@@ -45,6 +45,8 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
         // 응답 데이터 생성
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("message", "로그인 성공");
+        // id(PK)가 빠져있으면 프론트에서 채팅방 생성(senderId 필요) 등을 만들 방법이 없어서 추가함
+        responseData.put("id", claims.get("id"));
         responseData.put("depart", claims.get("department"));
         responseData.put("name", claims.get("name"));
         responseData.put("employeeNo", claims.get("employeeNo"));
