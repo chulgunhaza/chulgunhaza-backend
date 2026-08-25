@@ -204,6 +204,52 @@ class ChatRoomServiceImplTest {
         org.mockito.Mockito.verify(employeeChatRoomRepository).delete(myMembership);
     }
 
+    @Test
+    @DisplayName("memberIds에 개설자 본인 id가 섞여 있으면 걸러내고, 걸러낸 뒤 남는 상대가 없으면 예외를 던진다")
+    void 대화_상대에_본인_id가_섞여있으면_걸러낸다() {
+        Long myEmployeeId = 1L;
+        Long otherId = 2L;
+
+        // 본인 id + 실제 상대 id가 같이 온 경우 — 본인 id는 걸러내고 상대 1명으로만 방이 만들어져야
+        // 한다. (예전엔 안 걸러내서 employee_chatroom에 본인 행이 중복 저장되고, 방 목록엔
+        // "다른 참여자 없음" 취급으로 "(대화 상대 없음)"이 뜨는 버그가 있었다 — 실측으로 발견)
+        com.example.chulgunhazabackend.dto.chat.ChatRoomCreateRequestDto dto =
+                new com.example.chulgunhazabackend.dto.chat.ChatRoomCreateRequestDto();
+        dto.setMemberIds(List.of(myEmployeeId, otherId));
+
+        given(employeeChatRoomRepository.findRoomIdByEmployeeIds(myEmployeeId, otherId))
+                .willReturn(java.util.Optional.empty());
+        ChatRoom savedRoom = ChatRoom.builder().build();
+        setField(savedRoom, "id", 999L);
+        given(chatRoomRepository.save(org.mockito.ArgumentMatchers.any())).willReturn(savedRoom);
+        Employee me = mock(Employee.class);
+        given(me.getId()).willReturn(myEmployeeId);
+        Employee other = mock(Employee.class);
+        given(other.getId()).willReturn(otherId);
+        given(employeeRepository.findEmployeeById(myEmployeeId)).willReturn(java.util.Optional.of(me));
+        given(employeeRepository.findEmployeeById(otherId)).willReturn(java.util.Optional.of(other));
+
+        chatRoomService.saveChatRoom(dto, myEmployeeId);
+
+        // 본인(1L)은 memberEmployees 목록에 안 들어가고 상대(2L)만 들어가서 저장 호출돼야 한다.
+        org.mockito.Mockito.verify(employeeChatRoomService)
+                .save(org.mockito.ArgumentMatchers.eq(savedRoom), org.mockito.ArgumentMatchers.eq(me), org.mockito.ArgumentMatchers.eq(List.of(other)));
+    }
+
+    @Test
+    @DisplayName("memberIds가 본인 id뿐이면(=걸러내고 나면 상대가 없으면) 예외를 던진다")
+    void 대화_상대가_본인뿐이면_예외() {
+        Long myEmployeeId = 1L;
+        com.example.chulgunhazabackend.dto.chat.ChatRoomCreateRequestDto dto =
+                new com.example.chulgunhazabackend.dto.chat.ChatRoomCreateRequestDto();
+        dto.setMemberIds(List.of(myEmployeeId));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> chatRoomService.saveChatRoom(dto, myEmployeeId))
+                .isInstanceOf(com.example.chulgunhazabackend.exception.chatException.ChatException.class);
+
+        org.mockito.Mockito.verify(chatRoomRepository, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
     private EmployeeChatRoom employeeChatRoomOf(Long employeeChatRoomId, Long roomId, Long employeeId, String employeeName) {
         Employee employee = mock(Employee.class);
         given(employee.getId()).willReturn(employeeId);
