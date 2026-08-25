@@ -4,6 +4,7 @@ import com.example.chulgunhazabackend.domain.chat.EmployeeChatRoom;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -30,5 +31,13 @@ public interface EmployeeChatRoomRepository extends JpaRepository<EmployeeChatRo
     List<EmployeeChatRoom> findOtherMembersByChatRoomId(@Param("chatRoomId") Long chatRoomId, @Param("employeeId") Long employeeId);
 
     Optional<EmployeeChatRoom> findByEmployeeIdAndChatRoomId(Long employeeId, Long chatRoomId);
+
+    // INFO : 이 사람이 이 방을 읽었다고(=messageId까지는 다 봤다고) 표시. 이미 그보다 최신
+    // 지점까지 읽은 상태라면(다른 탭에서 먼저 읽었다든가) 뒤로 되돌리지 않는다.
+    @Modifying
+    @Query("UPDATE EmployeeChatRoom e SET e.lastReadMessageId = :messageId " +
+            "WHERE e.employee.id = :employeeId AND e.chatRoom.id = :roomId " +
+            "AND (e.lastReadMessageId IS NULL OR e.lastReadMessageId < :messageId)")
+    void markReadUpTo(@Param("employeeId") Long employeeId, @Param("roomId") Long roomId, @Param("messageId") Long messageId);
 
 }

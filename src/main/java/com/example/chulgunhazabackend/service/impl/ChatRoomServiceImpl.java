@@ -90,7 +90,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                     roomId,
                     otherMembers,
                     lastMessage != null ? lastMessage.getMessage() : null,
-                    chatMessageRepository.findByIsReadCount(roomId, employeeId),
+                    chatMessageRepository.countUnread(roomId, employeeId, myRoom.getLastReadMessageId()),
                     lastMessage != null ? lastMessage.getCreateTime() : null
             );
         });

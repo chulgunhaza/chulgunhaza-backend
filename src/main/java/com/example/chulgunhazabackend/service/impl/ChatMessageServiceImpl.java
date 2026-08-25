@@ -60,9 +60,14 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         // INFO : 채팅방 별 메시지 가져오기
         Page<ChatMessage> contents = chatMessageRepository.findByChatRoomOrderByCreatedAtDesc(chatRoom, pageable);
 
-        // INFO : 채팅방 읽음 처리
+        // INFO : 채팅방 읽음 처리 — "나"(employeeId)가 이 방의 최신 메시지까지 봤다고 표시.
+        // 사람별 포인터(EmployeeChatRoom.lastReadMessageId)라서 그룹 채팅에서 다른 사람의
+        // 읽음 여부에는 영향을 주지 않는다.
         // HACK : 추후 배치 처리 필요.
-        chatMessageRepository.updateByChatRoomAndNotSendUserMessage(roomId, employeeId);
+        Long maxMessageId = chatMessageRepository.findMaxMessageId(roomId);
+        if (maxMessageId != null) {
+            employeeChatRoomRepository.markReadUpTo(employeeId, roomId, maxMessageId);
+        }
 
         // INFO : PAGING
         Page<ChatMessageListResponseDto> pageDto = contents.map(chatMessage -> new ChatMessageListResponseDto().fromEntity(chatMessage));
