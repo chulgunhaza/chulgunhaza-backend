@@ -12,6 +12,10 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class ChatMessageListResponseDto {
 
+    // INFO : 실시간 읽음 알림(WebSocket read 이벤트)에서 "어떤 메시지가 읽혔는지" 매칭하려면
+    // 프론트가 메시지 id를 들고 있어야 해서 추가했다.
+    private Long messageId;
+
     private Long senderId;
 
     private String message;
@@ -20,16 +24,20 @@ public class ChatMessageListResponseDto {
 
     private LocalDateTime createdTime;
 
-    private boolean isRead;
+    // INFO : 이 메시지를 "아직" 안 읽은 방 참여자 수 (발신자 본인 제외). 카카오톡 단톡방처럼
+    // 각자 읽으면 하나씩 줄어들다가 전원 읽으면 0. 예전엔 메시지당 boolean 하나(isRead)로
+    // 관리해서 한 명만 읽어도 전원 읽음 처리되는 버그가 있었다 — 방 참여자별
+    // lastReadMessageId(EmployeeChatRoom)를 기준으로 매번 다시 계산한다.
+    private long unReadCount;
 
-
-    public ChatMessageListResponseDto fromEntity(ChatMessage chatMessage) {
+    public static ChatMessageListResponseDto fromEntity(ChatMessage chatMessage, long unReadCount) {
         return new ChatMessageListResponseDto(
-                chatMessage.getEmployee().getId()
+                chatMessage.getId()
+                , chatMessage.getEmployee().getId()
                 , chatMessage.getMessage()
                 , chatMessage.getChatRoom().getId()
                 , chatMessage.getCreateTime()
-                , chatMessage.isRead()
+                , unReadCount
         );
     }
 }

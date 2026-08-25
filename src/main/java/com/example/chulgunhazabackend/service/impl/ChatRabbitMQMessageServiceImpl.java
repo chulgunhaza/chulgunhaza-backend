@@ -68,7 +68,7 @@ public class ChatRabbitMQMessageServiceImpl implements ChatRabbitMQMessageServic
         List<EmployeeChatRoom> receivers = employeeChatRoomRepository.findOtherMembersByChatRoomId(chatMessageCreateRequestDto.getRoomId(), senderId);
 
         for (EmployeeChatRoom receiver : receivers) {
-            deliverToOneReceiver(chatMessageCreateRequestDto, senderId, receiver.getEmployee().getId());
+            deliverToOneReceiver(chatMessageCreateRequestDto, senderId, receiver);
         }
 
         log.info("Sending chat message to RabbitMQ");
@@ -76,27 +76,41 @@ public class ChatRabbitMQMessageServiceImpl implements ChatRabbitMQMessageServic
         return "전송 완료";
     }
 
-    private void deliverToOneReceiver(ChatMessageCreateRequestDto chatMessageCreateRequestDto, Long senderId, Long receiverId) {
+    private void deliverToOneReceiver(ChatMessageCreateRequestDto chatMessageCreateRequestDto, Long senderId, EmployeeChatRoom receiver) {
+
+        Long receiverId = receiver.getEmployee().getId();
+        Long roomId = chatMessageCreateRequestDto.getRoomId();
 
         // INFO : ChatRoom 관련 session 이 존재하면 전송
         // HACK : 추후 Listener 내부로 로직 리펙토링 가능.
-        WebSocketSession session = webSocketMessageHandler.getSession(receiverId, chatMessageCreateRequestDto.getRoomId());
+        WebSocketSession session = webSocketMessageHandler.getSession(receiverId, roomId);
         log.info(String.valueOf(session));
-        if(session != null){
+        boolean delivered = false;
+        if (session != null) {
             try {
                 session.sendMessage(new TextMessage(objectMapper.writeValueAsString(chatMessageCreateRequestDto)));
-            } catch (IOException e) {
-                log.info(e.getMessage());
+                delivered = true;
+            } catch (IOException | IllegalStateException e) {
+                // INFO : IllegalStateException은 "세션이 이미 닫혔다"는 뜻 — 클라이언트가 정상
+                // 종료 핸드셰이크 없이 뚝 끊긴 경우 등으로 실측 확인됨. 이걸 안 잡으면 이 요청
+                // 전체가 500으로 죽는다. 맵에서도 정리해서 다음번엔 바로 SSE로 폴백하게 한다.
+                log.info("failed to deliver via WebSocket, removing stale session: {}", e.getMessage());
+                webSocketMessageHandler.removeSession(receiverId, roomId);
             }
-        }else{
-            // INFO : 그렇지 않다면 알람 전송
-            log.info("session is null -> change sse session");
+        }
+
+        if (!delivered) {
+            // INFO : 세션이 없거나(session == null) 방금 죽은 걸 확인했으면 알람 전송
+            log.info("no live session -> fall back to sse");
 
             if(sseEmitterManager.getChatEmitter(receiverId) != null){
                 Employee senderEmployee = employeeRepository.findEmployeeById(senderId).orElseThrow(() -> new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER));
                 // INFO : 안읽은 메시지 수는 "받는 사람" 기준이어야 한다 — 기존엔 senderId로 잘못
-                // 조회하고 있었다(단체 채팅 브로드캐스트 리팩토링하며 같이 바로잡음).
-                long unReadMessageCount = chatMessageRepository.findByIsReadCount(chatMessageCreateRequestDto.getRoomId(), receiverId);
+                // 조회하고 있었다(단체 채팅 브로드캐스트 리팩토링하며 같이 바로잡음). 지금 막
+                // 도착한 이 메시지까지 포함해서 세야 하니 receiver의 lastReadMessageId(아직
+                // 이 메시지를 반영 안 한 값) 기준으로 그대로 카운트하면 된다.
+                long unReadMessageCount = chatMessageRepository.countUnread(
+                        chatMessageCreateRequestDto.getRoomId(), receiverId, receiver.getLastReadMessageId());
 
                 // INFO event 발행
                 applicationEventPublisher.publishEvent(new ChatCreateEvent(

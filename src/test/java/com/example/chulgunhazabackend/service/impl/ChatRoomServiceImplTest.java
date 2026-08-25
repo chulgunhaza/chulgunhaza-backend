@@ -80,7 +80,7 @@ class ChatRoomServiceImplTest {
         given(employeeChatRoomService.findByEmployeeId(myEmployeeId, pageable)).willReturn(myRoomsPage);
         given(employeeChatRoomRepository.findOtherMembersByChatRoomId(roomId, myEmployeeId)).willReturn(List.of(other));
         given(chatMessageRepository.findByChatRoomLastMessage(roomId)).willReturn(null); // 메시지 없음
-        given(chatMessageRepository.findByIsReadCount(roomId, myEmployeeId)).willReturn(0L);
+        given(chatMessageRepository.countUnread(roomId, myEmployeeId, myMembership.getLastReadMessageId())).willReturn(0L);
 
         PageDto<ChatRoomListResponseDto> result = chatRoomService.getAllChatRoomsByEmployeeId(myEmployeeId, pageable);
 
@@ -110,7 +110,7 @@ class ChatRoomServiceImplTest {
         given(employeeChatRoomService.findByEmployeeId(myEmployeeId, pageable)).willReturn(myRoomsPage);
         given(employeeChatRoomRepository.findOtherMembersByChatRoomId(roomId, myEmployeeId)).willReturn(List.of(other));
         given(chatMessageRepository.findByChatRoomLastMessage(roomId)).willReturn(lastMessage);
-        given(chatMessageRepository.findByIsReadCount(roomId, myEmployeeId)).willReturn(3L);
+        given(chatMessageRepository.countUnread(roomId, myEmployeeId, myMembership.getLastReadMessageId())).willReturn(3L);
 
         PageDto<ChatRoomListResponseDto> result = chatRoomService.getAllChatRoomsByEmployeeId(myEmployeeId, pageable);
 
@@ -136,7 +136,7 @@ class ChatRoomServiceImplTest {
         given(employeeChatRoomService.findByEmployeeId(myEmployeeId, pageable)).willReturn(myRoomsPage);
         given(employeeChatRoomRepository.findOtherMembersByChatRoomId(roomId, myEmployeeId)).willReturn(List.of(member2, member3));
         given(chatMessageRepository.findByChatRoomLastMessage(roomId)).willReturn(null);
-        given(chatMessageRepository.findByIsReadCount(roomId, myEmployeeId)).willReturn(0L);
+        given(chatMessageRepository.countUnread(roomId, myEmployeeId, myMembership.getLastReadMessageId())).willReturn(0L);
 
         PageDto<ChatRoomListResponseDto> result = chatRoomService.getAllChatRoomsByEmployeeId(myEmployeeId, pageable);
 
@@ -145,6 +145,49 @@ class ChatRoomServiceImplTest {
         assertThat(dto.isGroup()).isTrue();
         assertThat(dto.getRoomName()).isEqualTo("이서연, 박민준");
         assertThat(dto.getMembers()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("그룹 채팅방에서 안읽은 메시지 수는 각자 마지막으로 읽은 지점 기준으로 사람마다 다르게 계산된다")
+    void 그룹_채팅방_안읽은_메시지_수는_사람마다_다르다() {
+        Long roomId = 500L;
+        Long meId = 1L;
+        Long otherMemberId = 2L;
+
+        // "나"는 15번 메시지까지 읽었고, 같은 방의 다른 참여자는 5번 메시지까지만 읽었다 —
+        // 예전엔(메시지당 is_read boolean 하나) 한쪽이 방을 열어보면 둘 다 읽음 처리돼버렸지만,
+        // 이제는 EmployeeChatRoom.lastReadMessageId가 사람별로 따로 있어서 서로 영향을 안 준다.
+        EmployeeChatRoom myMembership = employeeChatRoomOf(1L, roomId, meId, "김태동");
+        setField(myMembership, "lastReadMessageId", 15L);
+        EmployeeChatRoom otherMembership = employeeChatRoomOf(2L, roomId, otherMemberId, "이서연");
+        setField(otherMembership, "lastReadMessageId", 5L);
+
+        Pageable pageable = PageRequest.of(0, 20);
+
+        // 내 관점으로 방 목록을 조회하면: 다른 참여자는 "이서연" 1명, 내 lastReadMessageId(15) 기준.
+        given(employeeChatRoomService.findByEmployeeId(meId, pageable))
+                .willReturn(new PageImpl<>(List.of(myMembership), pageable, 1));
+        given(employeeChatRoomRepository.findOtherMembersByChatRoomId(roomId, meId))
+                .willReturn(List.of(otherMembership));
+        given(chatMessageRepository.findByChatRoomLastMessage(roomId)).willReturn(null);
+        given(chatMessageRepository.countUnread(roomId, meId, 15L)).willReturn(2L);
+
+        // 같은 방을 다른 참여자 관점으로 조회하면: 상대는 "나", 그 사람의 lastReadMessageId(5) 기준.
+        given(employeeChatRoomService.findByEmployeeId(otherMemberId, pageable))
+                .willReturn(new PageImpl<>(List.of(otherMembership), pageable, 1));
+        given(employeeChatRoomRepository.findOtherMembersByChatRoomId(roomId, otherMemberId))
+                .willReturn(List.of(myMembership));
+        given(chatMessageRepository.countUnread(roomId, otherMemberId, 5L)).willReturn(9L);
+
+        Long myUnread = chatRoomService.getAllChatRoomsByEmployeeId(meId, pageable)
+                .getContents().get(0).getUnReadMessageCount();
+        Long otherUnread = chatRoomService.getAllChatRoomsByEmployeeId(otherMemberId, pageable)
+                .getContents().get(0).getUnReadMessageCount();
+
+        assertThat(myUnread).isEqualTo(2L);
+        assertThat(otherUnread).isEqualTo(9L);
+        // 같은 방인데도 서로 다른 값이 나온다는 게 핵심 — 사람별로 독립적으로 추적된다는 증거.
+        assertThat(myUnread).isNotEqualTo(otherUnread);
     }
 
     @Test
