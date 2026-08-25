@@ -1,6 +1,7 @@
 package com.example.chulgunhazabackend.service.impl;
 
 import com.example.chulgunhazabackend.config.RabbitMQConfig;
+import com.example.chulgunhazabackend.domain.chat.EmployeeChatRoom;
 import com.example.chulgunhazabackend.domain.member.Employee;
 import com.example.chulgunhazabackend.dto.chat.ChatMessageCreateRMQDto;
 import com.example.chulgunhazabackend.dto.chat.ChatMessageCreateRequestDto;
@@ -9,6 +10,7 @@ import com.example.chulgunhazabackend.event.chat.event.ChatCreateEvent;
 import com.example.chulgunhazabackend.exception.employeeException.EmployeeException;
 import com.example.chulgunhazabackend.exception.employeeException.EmployeeExceptionType;
 import com.example.chulgunhazabackend.repository.ChatMessageRepository;
+import com.example.chulgunhazabackend.repository.EmployeeChatRoomRepository;
 import com.example.chulgunhazabackend.repository.EmployeeRepository;
 import com.example.chulgunhazabackend.service.ChatRabbitMQMessageService;
 import com.example.chulgunhazabackend.service.sse.SseEmitterManager;
@@ -23,6 +25,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
+import java.util.List;
 
 
 @Slf4j
@@ -37,6 +40,7 @@ public class ChatRabbitMQMessageServiceImpl implements ChatRabbitMQMessageServic
     private final ChatMessageRepository chatMessageRepository;
     private final SseEmitterManager sseEmitterManager;
     private final EmployeeRepository employeeRepository;
+    private final EmployeeChatRoomRepository employeeChatRoomRepository;
 
     //INFO : 채팅 알람 발생 시 RMQ 로 메시지 전송
     public void sendNotification(ChatNotificationDto chatNotificationDto){
@@ -44,13 +48,12 @@ public class ChatRabbitMQMessageServiceImpl implements ChatRabbitMQMessageServic
         log.info("Sending notification to RabbitMQ");
     }
 
-    // INFO: 채팅 저장 RMQ 전송
+    // INFO: 채팅 저장 RMQ 전송 + 방 참여자 전원(그룹 포함)에게 실시간 전달
     public String sendChatMessage(ChatMessageCreateRequestDto chatMessageCreateRequestDto, Long senderId){
 
-        // INFO : RMQ 로 전송을 위한 데이터 바인딩
+        // INFO : RMQ 로 전송을 위한 데이터 바인딩 (저장은 receiverId 없이도 가능 — roomId로 충분)
         ChatMessageCreateRMQDto dto = new ChatMessageCreateRMQDto(
                 senderId
-                , chatMessageCreateRequestDto.getReceiverId()
                 , chatMessageCreateRequestDto.getMessage()
                 , chatMessageCreateRequestDto.getRoomId()
                 , chatMessageCreateRequestDto.getCreateTime());
@@ -60,9 +63,24 @@ public class ChatRabbitMQMessageServiceImpl implements ChatRabbitMQMessageServic
                 , RabbitMQConfig.CHAT_ROUTING_KEY
                 , dto);
 
+        // INFO : 이 방의 나(sender)를 제외한 참여자 전원에게 실시간 전달 — 1:1이면 1명,
+        // 단체 채팅이면 여러 명에게 순서대로 WS(접속 중) 또는 SSE(미접속) 알림을 보낸다.
+        List<EmployeeChatRoom> receivers = employeeChatRoomRepository.findOtherMembersByChatRoomId(chatMessageCreateRequestDto.getRoomId(), senderId);
+
+        for (EmployeeChatRoom receiver : receivers) {
+            deliverToOneReceiver(chatMessageCreateRequestDto, senderId, receiver.getEmployee().getId());
+        }
+
+        log.info("Sending chat message to RabbitMQ");
+
+        return "전송 완료";
+    }
+
+    private void deliverToOneReceiver(ChatMessageCreateRequestDto chatMessageCreateRequestDto, Long senderId, Long receiverId) {
+
         // INFO : ChatRoom 관련 session 이 존재하면 전송
         // HACK : 추후 Listener 내부로 로직 리펙토링 가능.
-        WebSocketSession session = webSocketMessageHandler.getSession(chatMessageCreateRequestDto.getReceiverId(), chatMessageCreateRequestDto.getRoomId());
+        WebSocketSession session = webSocketMessageHandler.getSession(receiverId, chatMessageCreateRequestDto.getRoomId());
         log.info(String.valueOf(session));
         if(session != null){
             try {
@@ -74,16 +92,18 @@ public class ChatRabbitMQMessageServiceImpl implements ChatRabbitMQMessageServic
             // INFO : 그렇지 않다면 알람 전송
             log.info("session is null -> change sse session");
 
-            if(sseEmitterManager.getChatEmitter(chatMessageCreateRequestDto.getReceiverId()) != null){
+            if(sseEmitterManager.getChatEmitter(receiverId) != null){
                 Employee senderEmployee = employeeRepository.findEmployeeById(senderId).orElseThrow(() -> new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER));
-                long unReadMessageCount = chatMessageRepository.findByIsReadCount(chatMessageCreateRequestDto.getRoomId(), senderId);
+                // INFO : 안읽은 메시지 수는 "받는 사람" 기준이어야 한다 — 기존엔 senderId로 잘못
+                // 조회하고 있었다(단체 채팅 브로드캐스트 리팩토링하며 같이 바로잡음).
+                long unReadMessageCount = chatMessageRepository.findByIsReadCount(chatMessageCreateRequestDto.getRoomId(), receiverId);
 
                 // INFO event 발행
                 applicationEventPublisher.publishEvent(new ChatCreateEvent(
                         chatMessageCreateRequestDto.getRoomId()
                         , senderEmployee.getEmployeeNo()
                         , senderEmployee.getName()
-                        , chatMessageCreateRequestDto.getReceiverId()
+                        , receiverId
                         , chatMessageCreateRequestDto.getMessage()
                         , chatMessageCreateRequestDto.getCreateTime()
                         , unReadMessageCount
@@ -91,10 +111,6 @@ public class ChatRabbitMQMessageServiceImpl implements ChatRabbitMQMessageServic
             }
 
         }
-
-        log.info("Sending chat message to RabbitMQ");
-
-        return "전송 완료";
     }
 
 }

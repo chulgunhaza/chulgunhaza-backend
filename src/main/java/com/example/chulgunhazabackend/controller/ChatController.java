@@ -54,4 +54,11 @@ public class ChatController {
         return ResponseEntity.ok().body(chatMessageService.getChatMessagesByRoomId(chatRoomId, employeeCredentialDto.getId(), pageable));
     }
 
+    // INFO : 채팅방 나가기 컨트롤러입니다. 내 참여 기록만 지우고 방/메시지는 보존합니다.
+    @DeleteMapping("/{chatRoomId}/leave")
+    public ResponseEntity<Void> leaveRoom(@AuthenticationPrincipal EmployeeCredentialDto employeeCredentialDto, @PathVariable Long chatRoomId){
+        chatRoomService.leaveChatRoom(chatRoomId, employeeCredentialDto.getId());
+        return ResponseEntity.noContent().build();
+    }
+
 }

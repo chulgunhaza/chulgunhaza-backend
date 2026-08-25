@@ -16,9 +16,8 @@ import java.time.LocalDateTime;
 @Getter
 public class ChatMessageCreateRequestDto {
 
-    @NotNull(message = "수신자 아이디가 누락되었습니다.")
-    private Long receiverId;
-
+    // INFO : 수신자를 클라이언트가 지정하지 않는다 — roomId로 방을 알면 참여자 전원(그룹 포함)이
+    // 서버에서 조회되므로 receiverId는 더 이상 필요 없다 (단체 채팅 지원하며 제거).
     // 최소 10자 제약은 "네", "넵!", "확인했습니다" 같은 실제 대화에서 흔한 짧은 답장을
     // 전부 막는 부자연스러운 규칙이었다 (React 프론트로 실제 채팅을 테스트하다가 발견).
     // 공백만 있는 메시지만 막고, 상한(300자)은 그대로 유지한다.
