@@ -2,6 +2,7 @@ package com.example.chulgunhazabackend.service.impl;
 
 import com.example.chulgunhazabackend.domain.board.PostFile;
 import com.example.chulgunhazabackend.domain.common.BaseFile;
+import com.example.chulgunhazabackend.domain.member.EmployeeImage;
 import com.example.chulgunhazabackend.service.FileService;
 import jakarta.annotation.PostConstruct;
 import lombok.NoArgsConstructor;
@@ -81,6 +82,26 @@ public class LocalFileServiceImpl implements FileService {
         return postFile.stream()
                 .map(BaseFile::getFilePath)
                 .collect(Collectors.toList());
+    }
+
+    // #58: 사원 프로필 이미지 업로드. EmployeeImage는 PostFile과 달리 BaseFile을 상속하지
+    // 않는 별도 @Embeddable이라 saveFile()을 그대로 재사용할 수 없어 별도로 구현했다.
+    @Override
+    public EmployeeImage saveEmployeeImage(MultipartFile file) throws IOException {
+        String originalFileName = file.getOriginalFilename();
+        String uuidFileName = UUID.randomUUID().toString() + "_" + originalFileName;
+        File destination = new File(uploadDir + uuidFileName);
+        String fileType = Objects.requireNonNull(originalFileName)
+                .substring(originalFileName.lastIndexOf("."));
+
+        file.transferTo(destination);
+
+        return EmployeeImage.builder()
+                .imageName(originalFileName)
+                .imagePath(destination.getAbsolutePath())
+                .imageSize(file.getSize())
+                .imageType(fileType)
+                .build();
     }
 
 }

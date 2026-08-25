@@ -14,7 +14,7 @@ import java.util.List;
 public class PostSearchResponseDto {
     private String title;
     private String content;
-//    private String author;
+    private String author; // #59: Post-Employee 연동 후 작성자 이름 노출
     private List<String> imageList;
     private int count;
     private Category category;
@@ -23,6 +23,7 @@ public class PostSearchResponseDto {
         return new PostSearchResponseDto(
                 post.getTitle()
                 ,post.getContent()
+                ,post.getEmployee() != null ? post.getEmployee().getName() : null // 마이그레이션 이전 게시글 대비
                 ,imageList
                 ,post.getCount()
                 ,post.getCategory()

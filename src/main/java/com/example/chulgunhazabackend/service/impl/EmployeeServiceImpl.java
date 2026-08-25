@@ -15,6 +15,7 @@ import com.example.chulgunhazabackend.exception.employeeException.EmployeeExcept
 import com.example.chulgunhazabackend.exception.employeeException.EmployeeExceptionType;
 import com.example.chulgunhazabackend.repository.EmployeeRepository;
 import com.example.chulgunhazabackend.service.EmployeeService;
+import com.example.chulgunhazabackend.service.FileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -38,7 +39,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     private final PasswordEncoder passwordEncoder;
 
-    private final LocalFileServiceImpl fileService;
+    private final FileService fileService;
 
     // 사원 최초 생성 시 기본이미지, 기본 연차 생성
 
@@ -75,7 +76,6 @@ public class EmployeeServiceImpl implements EmployeeService {
 
 
     // 사원 정보 수정
-    // TODO: 사원 파일 이미지 저장 서비스 추가 예정
     @Transactional(rollbackFor = IOException.class)
     public EmployeeResponseDto modifyById(Long id, EmployeeModifyRequestDto employeeModifyRequestDto,
                                           MultipartFile image, Long executor) throws IOException {
@@ -90,7 +90,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         checkVersion(findEmployee, employeeModifyRequestDto.getVersion());
 
-        findEmployee.updateEmployee(employeeModifyRequestDto, checkImageIsNull(image));
+        findEmployee.updateEmployee(employeeModifyRequestDto, resolveEmployeeImage(image));
         Employee saved = employeeRepository.saveAndFlush(findEmployee);
 
         return EmployeeResponseDto.fromEntity(saved);
@@ -117,19 +117,15 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
 
-    private EmployeeImage checkImageIsNull(MultipartFile multipartFile){
-
-        //TODO: 파일 서비스 추가 예정
-
-        if(multipartFile.isEmpty()){
+    // #58: 새 이미지가 없으면(파라미터 자체가 없거나 빈 파일) 기본 이미지를 유지하고,
+    // 실제 파일이 왔으면 FileService로 디스크에 저장해서 실제 경로/크기/타입을 채운다.
+    private EmployeeImage resolveEmployeeImage(MultipartFile multipartFile) throws IOException {
+        if (multipartFile == null || multipartFile.isEmpty()) {
             return EmployeeImage.builder()
                     .imageName("default image")
                     .build(); // 기본 이미지를 사용한다고 지정
-        }else {
-            return EmployeeImage.builder()
-                    .imageName("modified image")
-                    .build(); // 변경된 이미지 지정
         }
+        return fileService.saveEmployeeImage(multipartFile);
     }
 
 

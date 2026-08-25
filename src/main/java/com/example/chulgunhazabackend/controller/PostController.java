@@ -1,5 +1,6 @@
 package com.example.chulgunhazabackend.controller;
 
+import com.example.chulgunhazabackend.dto.Employee.EmployeeCredentialDto;
 import com.example.chulgunhazabackend.dto.PageDto;
 import com.example.chulgunhazabackend.dto.board.*;
 import com.example.chulgunhazabackend.service.PostService;
@@ -8,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,8 +24,9 @@ public class PostController {
     private final PostService postService;
 
     @PostMapping("/create")
-    public ResponseEntity<Long> create(@Valid @RequestPart PostCreateRequestDto dto, @RequestParam("list") List<MultipartFile> list) throws IOException {
-        return ResponseEntity.status(201).body(postService.create(dto, list));
+    public ResponseEntity<Long> create(@Valid @RequestPart PostCreateRequestDto dto, @RequestParam("list") List<MultipartFile> list,
+                                       @AuthenticationPrincipal EmployeeCredentialDto employeeCredentialDto) throws IOException {
+        return ResponseEntity.status(201).body(postService.create(dto, list, employeeCredentialDto.getId()));
     }
 
     @GetMapping("/{postNumber}")

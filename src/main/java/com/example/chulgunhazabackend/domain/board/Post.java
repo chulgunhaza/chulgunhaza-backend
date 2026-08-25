@@ -23,11 +23,11 @@ public class Post extends BaseEntity {
     @Column(name = "post_id")
     private Long id;
 
-    //  TODO : User 추가시 주석해제 후 확인
-//    @ToString.Exclude
-//    @ManyToOne(fetch = FetchType.LAZY)
-//    @JoinColumn(name = "employee_id")
-//    private Employee employee;
+    // #59: Post 작성자. 이전엔 Employee 엔티티가 아직 없어서 주석 처리돼 있었음
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "employee_id")
+    private Employee employee;
 
     @Embedded
     private Category category;
@@ -46,11 +46,12 @@ public class Post extends BaseEntity {
     @ColumnDefault("0")
     private int count;
 
-    public Post(String title, String content, Category category, List<PostFile> postFilesList) {
+    public Post(String title, String content, Category category, List<PostFile> postFilesList, Employee employee) {
         this.title = title;
         this.content = content;
         this.category = category;
         this.postFilesList = postFilesList;
+        this.employee = employee;
     }
 
     public void updatePost(String title, String content, Category category, List<PostFile> postFilesList) {

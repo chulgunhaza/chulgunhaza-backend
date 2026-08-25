@@ -28,16 +28,19 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SessionCheckFilter extends OncePerRequestFilter {
 
+    // #52: Swagger UI/문서 엔드포인트는 세션 없이도 열람 가능해야 하므로 로그인 경로와 함께 예외 처리
+    private static final List<String> NO_SESSION_CHECK_PREFIXES = List.of(
+            "/v1/employee/login",
+            "/swagger-ui",
+            "/v3/api-docs"
+    );
+
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
         String path = request.getRequestURI();
         log.info(path);
 
-        if(path.startsWith("/v1/employee/login")){
-            return true;
-        }
-
-        return false; // false(체크) / true(체크X)
+        return NO_SESSION_CHECK_PREFIXES.stream().anyMatch(path::startsWith);
     }
 
     @Override

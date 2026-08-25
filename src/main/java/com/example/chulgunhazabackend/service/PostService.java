@@ -10,7 +10,7 @@ import java.net.MalformedURLException;
 import java.util.List;
 
 public interface PostService {
-    Long create(PostCreateRequestDto dto, List<MultipartFile> postFiles) throws IOException;
+    Long create(PostCreateRequestDto dto, List<MultipartFile> postFiles, Long executor) throws IOException;
     PostSearchResponseDto findById(Long postNumber) throws MalformedURLException;
     Long deleteById(Long postNumber) throws MalformedURLException;
     Long modifyById(Long postNumber, PostModifyRequestDto dto, List<MultipartFile> postFiles) throws IOException;
