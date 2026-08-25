@@ -1,5 +1,6 @@
 package com.example.chulgunhazabackend.service.impl;
 
+import com.example.chulgunhazabackend.domain.chat.ChatMessage;
 import com.example.chulgunhazabackend.domain.chat.ChatRoom;
 import com.example.chulgunhazabackend.domain.chat.EmployeeChatRoom;
 import com.example.chulgunhazabackend.domain.member.Employee;
@@ -76,11 +77,19 @@ public class ChatRoomServiceImpl implements ChatRoomService {
 
 
         // INFO : 가져온 데이터를 PageDto 에 넣기 위한 타입으로 변환
-        Page<ChatRoomListResponseDto> list =  contents.map(employeeChatRoom -> new ChatRoomListResponseDto()
-                .fromEntity( employeeChatRoom
-                            , chatMessageRepository.findByChatRoomLastMessage(employeeChatRoom.getChatRoom().getId()).getMessage()
-                            , chatMessageRepository.findByIsReadCount(employeeChatRoom.getChatRoom().getId(), employeeId)
-                            , chatMessageRepository.findByChatRoomLastMessage(employeeChatRoom.getChatRoom().getId()).getCreateTime()));
+        // 아직 메시지가 하나도 없는 새 채팅방은 findByChatRoomLastMessage가 null을 반환한다.
+        // 예전엔 여기서 바로 .getMessage()를 호출해서 NPE(500)가 났다 — 방을 막 만들고
+        // 목록을 조회하면 100% 재현됨. null-safe하게 고치면서 중복 조회도 한 번으로 줄였다.
+        Page<ChatRoomListResponseDto> list = contents.map(employeeChatRoom -> {
+            Long roomId = employeeChatRoom.getChatRoom().getId();
+            ChatMessage lastMessage = chatMessageRepository.findByChatRoomLastMessage(roomId);
+            return new ChatRoomListResponseDto().fromEntity(
+                    employeeChatRoom,
+                    lastMessage != null ? lastMessage.getMessage() : null,
+                    chatMessageRepository.findByIsReadCount(roomId, employeeId),
+                    lastMessage != null ? lastMessage.getCreateTime() : null
+            );
+        });
 
         return new PageDto<ChatRoomListResponseDto>(list);
 
