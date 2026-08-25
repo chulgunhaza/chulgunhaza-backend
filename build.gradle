@@ -64,6 +64,9 @@ dependencies {
 
     // spring retry
     implementation 'org.springframework.retry:spring-retry'
+
+    // openapi / swagger (#52)
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
 }
 
 tasks.named('test') {

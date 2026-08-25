@@ -6,6 +6,8 @@ import com.example.chulgunhazabackend.domain.annual.AnnualRecord;
 import com.example.chulgunhazabackend.domain.member.Employee;
 import com.example.chulgunhazabackend.dto.annual.AnnualUsageRequestDto;
 import com.example.chulgunhazabackend.dto.annual.AnnualUsageResponseDto;
+import com.example.chulgunhazabackend.event.annual.event.AnnualUseEvent;
+import com.example.chulgunhazabackend.event.common.Events;
 import com.example.chulgunhazabackend.exception.employeeException.EmployeeException;
 import com.example.chulgunhazabackend.exception.employeeException.EmployeeExceptionType;
 import com.example.chulgunhazabackend.repository.AnnualRecordRepository;
@@ -57,6 +59,10 @@ public class AnnualLeaveServiceImpl implements AnnualLeaveService {
                 .annualApprovalStatus(AnnualApprovalStatus.APPROVED)
                 .build();
         AnnualRecord saved = annualRecordRepository.save(annualRecord);
+
+        // #46: 연차 사용 완료를 MAIN SSE 채널로 알림.
+        // MAIN 채널은 (CHAT과 달리) employeeNo로 구독을 키잉하므로 PK가 아니라 employeeNo를 넘긴다.
+        Events.raise(new AnnualUseEvent(employee.getEmployeeNo(), usedAnnual.getRemainingAnnualCount()));
 
         return AnnualUsageResponseDto.of(saved, usedAnnual.getTotalAnnualCount(),
                 usedAnnual.getUseCount(), usedAnnual.getRemainingAnnualCount());

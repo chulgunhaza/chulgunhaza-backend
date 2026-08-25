@@ -8,6 +8,7 @@ import com.example.chulgunhazabackend.dto.Employee.EmployeeResponseDto;
 import com.example.chulgunhazabackend.exception.employeeException.EmployeeException;
 import com.example.chulgunhazabackend.exception.employeeException.EmployeeExceptionType;
 import com.example.chulgunhazabackend.repository.EmployeeRepository;
+import com.example.chulgunhazabackend.service.FileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,7 +44,7 @@ class EmployeeServiceImplTest {
     private PasswordEncoder passwordEncoder;
 
     @Mock
-    private LocalFileServiceImpl fileService;
+    private FileService fileService;
 
     @InjectMocks
     private EmployeeServiceImpl employeeService;
@@ -138,6 +139,51 @@ class EmployeeServiceImplTest {
     }
 
     @Test
+    @DisplayName("수정 시 새 이미지가 오면 FileService로 저장하고 그 결과(EmployeeImage)를 사원에 반영한다 — #58")
+    void modifyById_새_이미지가_있으면_FileService로_저장한다() throws Exception {
+        Employee employee = employeeOf(6L, "김태동", "kim@chulgunhaza.com", 3L); // version = 3
+        given(employeeRepository.findEmployeeByIdForUpdate(6L)).willReturn(Optional.of(employee));
+        given(employeeRepository.saveAndFlush(any(Employee.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        EmployeeModifyRequestDto modifyRequestDto = new EmployeeModifyRequestDto(
+                "김태동", "kim@chulgunhaza.com", Gender.MALE,
+                LocalDate.of(1999, 1, 1), LocalDate.of(2025, 1, 1),
+                "개발팀", Position.EMPLOYEE, List.of(UserRole.USER),
+                3L // 실제 버전과 동일
+        );
+        MultipartFile newImage = mock(MultipartFile.class);
+        given(newImage.isEmpty()).willReturn(false);
+        EmployeeImage savedImage = EmployeeImage.builder()
+                .imageName("profile.png").imagePath("/uploads/uuid_profile.png")
+                .imageSize(1024L).imageType(".png").build();
+        given(fileService.saveEmployeeImage(newImage)).willReturn(savedImage);
+
+        EmployeeResponseDto responseDto = employeeService.modifyById(6L, modifyRequestDto, newImage, 1L);
+
+        assertThat(responseDto.getEmployeeImage().getImagePath()).isEqualTo("/uploads/uuid_profile.png");
+        verify(fileService).saveEmployeeImage(newImage);
+    }
+
+    @Test
+    @DisplayName("수정 시 이미지가 없으면(null) FileService를 호출하지 않고 기본 이미지를 유지한다")
+    void modifyById_이미지가_없으면_기본_이미지를_유지한다() throws Exception {
+        Employee employee = employeeOf(9L, "김태동", "kim@chulgunhaza.com", 0L);
+        given(employeeRepository.findEmployeeByIdForUpdate(9L)).willReturn(Optional.of(employee));
+        given(employeeRepository.saveAndFlush(any(Employee.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        EmployeeModifyRequestDto modifyRequestDto = new EmployeeModifyRequestDto(
+                "김태동", "kim@chulgunhaza.com", Gender.MALE,
+                LocalDate.of(1999, 1, 1), LocalDate.of(2025, 1, 1),
+                "개발팀", Position.EMPLOYEE, List.of(UserRole.USER), 0L
+        );
+
+        EmployeeResponseDto responseDto = employeeService.modifyById(9L, modifyRequestDto, null, 1L);
+
+        assertThat(responseDto.getEmployeeImage().getImageName()).isEqualTo("default image");
+        verify(fileService, never()).saveEmployeeImage(any());
+    }
+
+    @Test
     @DisplayName("존재하는 사원을 삭제하면 delFlag가 true로 바뀐 상태로 저장한다 — 소프트 딜리트")
     void deleteById_소프트_딜리트_처리() {
         Employee employee = employeeOf(7L, "김태동", "kim@chulgunhaza.com", 0L);
@@ -157,16 +203,16 @@ class EmployeeServiceImplTest {
                 name, email, Gender.MALE, LocalDate.of(1999, 1, 1), LocalDate.of(2025, 1, 1),
                 null, "개발팀", Position.EMPLOYEE, List.of(UserRole.USER), employeeImage, annual
         );
-        setId(employee, id);
+        setField(employee, "id", id);
+        setField(employee, "version", version); // @Version은 리플렉션으로만 세팅 가능 (실제 DB 없이 단위 테스트하기 위함)
         return employee;
     }
 
-    // 테스트 전용: @GeneratedValue id는 리플렉션으로만 세팅 가능하다 (실제 DB 없이 단위 테스트하기 위함)
-    private void setId(Employee employee, Long id) {
+    private void setField(Employee employee, String fieldName, Object value) {
         try {
-            var field = Employee.class.getDeclaredField("id");
+            var field = Employee.class.getDeclaredField(fieldName);
             field.setAccessible(true);
-            field.set(employee, id);
+            field.set(employee, value);
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }

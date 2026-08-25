@@ -2,10 +2,14 @@ package com.example.chulgunhazabackend.service.impl;
 
 import com.example.chulgunhazabackend.domain.board.Category;
 import com.example.chulgunhazabackend.domain.board.Post;
+import com.example.chulgunhazabackend.domain.member.Employee;
 import com.example.chulgunhazabackend.dto.PageDto;
 import com.example.chulgunhazabackend.dto.board.*;
+import com.example.chulgunhazabackend.exception.employeeException.EmployeeException;
+import com.example.chulgunhazabackend.exception.employeeException.EmployeeExceptionType;
 import com.example.chulgunhazabackend.exception.postException.PostException;
 import com.example.chulgunhazabackend.exception.postException.PostExceptionType;
+import com.example.chulgunhazabackend.repository.EmployeeRepository;
 import com.example.chulgunhazabackend.repository.PostRepository;
 import com.example.chulgunhazabackend.service.FileService;
 import com.example.chulgunhazabackend.service.PostService;
@@ -29,13 +33,13 @@ public class PostServiceImpl implements PostService {
 
     private final FileService fileService;
 
-//    TODO: userService 추가 후 추가 예정
-//    @Autowired
-//    private UserService userService
+    private final EmployeeRepository employeeRepository; // #59: Post-Employee 연동
 
     @Transactional(rollbackFor = IOException.class)
-    public Long create(PostCreateRequestDto dto, List<MultipartFile> postFiles) throws IOException {
-        return postRepository.save(dto.toEntity(new Category(dto.getCategoryName()), fileService.savePostFiles(postFiles))).getId();
+    public Long create(PostCreateRequestDto dto, List<MultipartFile> postFiles, Long executor) throws IOException {
+        Employee employee = employeeRepository.findEmployeeById(executor)
+                .orElseThrow(() -> new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER));
+        return postRepository.save(dto.toEntity(new Category(dto.getCategoryName()), fileService.savePostFiles(postFiles), employee)).getId();
     }
 
     @Transactional(readOnly = true)
