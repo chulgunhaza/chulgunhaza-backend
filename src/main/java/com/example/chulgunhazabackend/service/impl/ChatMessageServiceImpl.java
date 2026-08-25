@@ -43,10 +43,9 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         // INFO: 전송하는 사원의 정보
         Employee sendEmployee = employeeRepository.findEmployeeById(chatMessageCreateRMQDto.getSenderId()).orElseThrow(() -> new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER));
 
-        // INFO: 전송받는 사원의 유무 확인
-        Employee receiveEmployee = employeeRepository.findEmployeeById(chatMessageCreateRMQDto.getReceiverId()).orElseThrow(() -> new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER));
-
         // INFO: 채팅방 인원이 아닌데 전송하는 경우 예외 처리
+        // (수신자는 단체 채팅에서 여러 명일 수 있어 더 이상 여기서 검증하지 않는다 — 실시간 전달
+        // 대상은 ChatRabbitMQMessageServiceImpl에서 방 참여자 전원을 조회해서 결정한다.)
         EmployeeChatRoom employeeChatRoom = employeeChatRoomRepository.findByEmployeeIdAndChatRoomId(sendEmployee.getId(), chatRoom.getId()).orElseThrow(() -> new ChatException(ChatExceptionType.NOT_FOUND_CHAT_USER));
 
         return chatMessageRepository.save(chatMessageCreateRMQDto.toEntity(chatRoom, sendEmployee)).getId();
