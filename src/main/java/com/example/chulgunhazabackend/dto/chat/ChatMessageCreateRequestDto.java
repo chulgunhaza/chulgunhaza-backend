@@ -19,8 +19,11 @@ public class ChatMessageCreateRequestDto {
     @NotNull(message = "수신자 아이디가 누락되었습니다.")
     private Long receiverId;
 
+    // 최소 10자 제약은 "네", "넵!", "확인했습니다" 같은 실제 대화에서 흔한 짧은 답장을
+    // 전부 막는 부자연스러운 규칙이었다 (React 프론트로 실제 채팅을 테스트하다가 발견).
+    // 공백만 있는 메시지만 막고, 상한(300자)은 그대로 유지한다.
     @NotBlank(message = "메시지가 누락되었거나, 공백입니다.")
-    @Size(min = 10, max = 300, message = "채팅의 최소 글자 수는 10, 최대 300자 입니다.")
+    @Size(max = 300, message = "채팅은 최대 300자까지 입력할 수 있습니다.")
     private String message;
 
     @NotNull(message = "채팅방 아이디가 누락되었습니다.")
