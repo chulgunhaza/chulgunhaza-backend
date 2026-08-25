@@ -32,6 +32,10 @@ public interface EmployeeChatRoomRepository extends JpaRepository<EmployeeChatRo
 
     Optional<EmployeeChatRoom> findByEmployeeIdAndChatRoomId(Long employeeId, Long chatRoomId);
 
+    // INFO : 방 참여자 전원(나 포함) — 메시지별 "안읽은 사람 수" 계산에 쓴다. 이 리스트를
+    // 미리 한 번만 불러와서 메시지마다 반복 조회하지 않고 메모리에서 계산한다.
+    List<EmployeeChatRoom> findByChatRoomId(Long chatRoomId);
+
     // INFO : 이 사람이 이 방을 읽었다고(=messageId까지는 다 봤다고) 표시. 이미 그보다 최신
     // 지점까지 읽은 상태라면(다른 탭에서 먼저 읽었다든가) 뒤로 되돌리지 않는다.
     @Modifying

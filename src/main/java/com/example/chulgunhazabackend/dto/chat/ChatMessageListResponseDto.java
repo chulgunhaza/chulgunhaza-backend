@@ -20,17 +20,19 @@ public class ChatMessageListResponseDto {
 
     private LocalDateTime createdTime;
 
-    // INFO : 메시지당 읽음 여부(isRead)는 제거했다 — 그룹 채팅에서는 "누가 읽었는지"가
-    // 사람마다 달라서 메시지 하나에 boolean 하나로는 표현이 안 된다. 읽음/안읽음은 이제
-    // 방 목록 단위(ChatRoomListResponseDto.unReadMessageCount, 사람별로 정확히 계산)로만
-    // 노출한다.
+    // INFO : 이 메시지를 "아직" 안 읽은 방 참여자 수 (발신자 본인 제외). 카카오톡 단톡방처럼
+    // 각자 읽으면 하나씩 줄어들다가 전원 읽으면 0. 예전엔 메시지당 boolean 하나(isRead)로
+    // 관리해서 한 명만 읽어도 전원 읽음 처리되는 버그가 있었다 — 방 참여자별
+    // lastReadMessageId(EmployeeChatRoom)를 기준으로 매번 다시 계산한다.
+    private long unReadCount;
 
-    public ChatMessageListResponseDto fromEntity(ChatMessage chatMessage) {
+    public static ChatMessageListResponseDto fromEntity(ChatMessage chatMessage, long unReadCount) {
         return new ChatMessageListResponseDto(
                 chatMessage.getEmployee().getId()
                 , chatMessage.getMessage()
                 , chatMessage.getChatRoom().getId()
                 , chatMessage.getCreateTime()
+                , unReadCount
         );
     }
 }

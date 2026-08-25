@@ -22,6 +22,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 
 
 @Service
@@ -62,16 +64,26 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
         // INFO : 채팅방 읽음 처리 — "나"(employeeId)가 이 방의 최신 메시지까지 봤다고 표시.
         // 사람별 포인터(EmployeeChatRoom.lastReadMessageId)라서 그룹 채팅에서 다른 사람의
-        // 읽음 여부에는 영향을 주지 않는다.
+        // 읽음 여부에는 영향을 주지 않는다. 아래 안읽은 사람 수 계산보다 먼저 해야
+        // 방금 읽은 메시지들에 "나"가 안읽은 사람으로 잡히지 않는다.
         // HACK : 추후 배치 처리 필요.
         Long maxMessageId = chatMessageRepository.findMaxMessageId(roomId);
         if (maxMessageId != null) {
             employeeChatRoomRepository.markReadUpTo(employeeId, roomId, maxMessageId);
         }
 
-        // INFO : PAGING
-        Page<ChatMessageListResponseDto> pageDto = contents.map(chatMessage -> new ChatMessageListResponseDto().fromEntity(chatMessage));
+        // INFO : 메시지별 "안읽은 사람 수"를 계산하려고 방 참여자 전원(과 각자의 lastReadMessageId)을
+        // 한 번만 불러온다 — 메시지마다 쿼리 날리면 페이지당 N+1이 나서 여기서 한 번에 처리.
+        List<EmployeeChatRoom> members = employeeChatRoomRepository.findByChatRoomId(roomId);
 
+        // INFO : PAGING
+        Page<ChatMessageListResponseDto> pageDto = contents.map(chatMessage -> {
+            long unReadCount = members.stream()
+                    .filter(member -> !member.getEmployee().getId().equals(chatMessage.getEmployee().getId())) // 발신자 본인 제외
+                    .filter(member -> member.getLastReadMessageId() == null || member.getLastReadMessageId() < chatMessage.getId())
+                    .count();
+            return ChatMessageListResponseDto.fromEntity(chatMessage, unReadCount);
+        });
 
         return new PageDto<>(pageDto) ;
     }
