@@ -43,7 +43,18 @@ public class ChatRoomServiceImpl implements ChatRoomService {
     @Override
     public Long saveChatRoom(ChatRoomCreateRequestDto chatRoomCreateRequestDto, Long employeeId) {
 
-        List<Long> memberIds = chatRoomCreateRequestDto.getMemberIds();
+        // INFO : 요청에 개설자 본인 id가 섞여 들어와도(중복 선택, 버그성 호출 등) 걸러낸다.
+        // 안 걸러내면 "본인 id가 곧 대화 상대"인 채로 방이 만들어져서, 상대가 없는(=본인만
+        // 중복으로 들어간) 방이 생기고 방 목록에 "(대화 상대 없음)"으로 노출되는 버그가 있었다
+        // (실측으로 발견 — employee_chatroom에 같은 방에 같은 사람 행이 2개씩 들어가 있었음).
+        List<Long> memberIds = chatRoomCreateRequestDto.getMemberIds().stream()
+                .filter(id -> !id.equals(employeeId))
+                .distinct()
+                .toList();
+
+        if (memberIds.isEmpty()) {
+            throw new ChatException(ChatExceptionType.NO_CHAT_PARTNER);
+        }
 
         // INFO : 1:1 채팅은 기존 방이 있으면 재사용(중복 생성 방지). 단체 채팅(2명 이상)은
         // "같은 멤버 조합"을 매칭하는 로직이 없으므로 매번 새 방을 만든다 — 사용자가 같은
