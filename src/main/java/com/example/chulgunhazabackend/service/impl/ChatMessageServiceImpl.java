@@ -3,7 +3,6 @@ package com.example.chulgunhazabackend.service.impl;
 import com.example.chulgunhazabackend.domain.chat.ChatMessage;
 import com.example.chulgunhazabackend.domain.chat.ChatRoom;
 import com.example.chulgunhazabackend.domain.chat.EmployeeChatRoom;
-import com.example.chulgunhazabackend.domain.member.Employee;
 import com.example.chulgunhazabackend.dto.PageDto;
 import com.example.chulgunhazabackend.dto.chat.ChatMessageCreateRMQDto;
 import com.example.chulgunhazabackend.dto.chat.ChatMessageListResponseDto;
@@ -52,15 +51,18 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         // INFO: 채팅방 존재 유무 확인
         ChatRoom chatRoom = chatRoomRepository.findById(chatMessageCreateRMQDto.getRoomId()).orElseThrow(() -> new ChatException(ChatExceptionType.NOT_FOUND_CHAT_ROOM));
 
-        // INFO: 전송하는 사원의 정보
-        Employee sendEmployee = employeeRepository.findEmployeeById(chatMessageCreateRMQDto.getSenderId()).orElseThrow(() -> new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER));
+        // INFO: 전송하는 사원이 실제로 존재하는지 확인 (Employee 애그리게이트는 id로만 참조 — #74 Phase 0)
+        Long senderId = chatMessageCreateRMQDto.getSenderId();
+        if (!employeeRepository.existsById(senderId)) {
+            throw new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER);
+        }
 
         // INFO: 채팅방 인원이 아닌데 전송하는 경우 예외 처리
         // (수신자는 단체 채팅에서 여러 명일 수 있어 더 이상 여기서 검증하지 않는다 — 실시간 전달
         // 대상은 ChatRabbitMQMessageServiceImpl에서 방 참여자 전원을 조회해서 결정한다.)
-        EmployeeChatRoom employeeChatRoom = employeeChatRoomRepository.findByEmployeeIdAndChatRoomId(sendEmployee.getId(), chatRoom.getId()).orElseThrow(() -> new ChatException(ChatExceptionType.NOT_FOUND_CHAT_USER));
+        employeeChatRoomRepository.findByEmployeeIdAndChatRoomId(senderId, chatRoom.getId()).orElseThrow(() -> new ChatException(ChatExceptionType.NOT_FOUND_CHAT_USER));
 
-        return chatMessageRepository.save(chatMessageCreateRMQDto.toEntity(chatRoom, sendEmployee)).getId();
+        return chatMessageRepository.save(chatMessageCreateRMQDto.toEntity(chatRoom, senderId)).getId();
     }
 
     @Override
@@ -109,7 +111,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
     private long countUnread(List<EmployeeChatRoom> members, ChatMessage chatMessage) {
         return members.stream()
-                .filter(member -> !member.getEmployee().getId().equals(chatMessage.getEmployee().getId())) // 발신자 본인 제외
+                .filter(member -> !member.getEmployeeId().equals(chatMessage.getEmployeeId())) // 발신자 본인 제외
                 .filter(member -> member.getLastReadMessageId() == null || member.getLastReadMessageId() < chatMessage.getId())
                 .count();
     }
@@ -129,7 +131,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         // 열려 있는) 사람에게만 보낸다. 접속 안 해 있으면 다음에 REST로 이 방을 다시 불러올 때
         // 어차피 정확한 값을 받는다.
         for (EmployeeChatRoom member : members) {
-            Long memberId = member.getEmployee().getId();
+            Long memberId = member.getEmployeeId();
             if (memberId.equals(readerId)) {
                 continue;
             }

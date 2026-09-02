@@ -2,7 +2,6 @@ package com.example.chulgunhazabackend.dto.chat;
 
 import com.example.chulgunhazabackend.domain.chat.ChatMessage;
 import com.example.chulgunhazabackend.domain.chat.ChatRoom;
-import com.example.chulgunhazabackend.domain.member.Employee;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -33,9 +32,9 @@ public class ChatMessageCreateRequestDto {
     private LocalDateTime createTime;
 
 
-    public ChatMessage toEntity(ChatRoom chatRoom, Employee employee){
+    public ChatMessage toEntity(ChatRoom chatRoom, Long employeeId){
         return ChatMessage.builder()
-                .employee(employee)
+                .employeeId(employeeId)
                 .chatRoom(chatRoom)
                 .message(message)
                 .createTime(createTime)

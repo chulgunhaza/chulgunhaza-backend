@@ -2,7 +2,6 @@ package com.example.chulgunhazabackend.dto.chat;
 
 import com.example.chulgunhazabackend.domain.chat.ChatMessage;
 import com.example.chulgunhazabackend.domain.chat.ChatRoom;
-import com.example.chulgunhazabackend.domain.member.Employee;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -22,9 +21,9 @@ public class ChatMessageCreateRMQDto {
 
     private LocalDateTime creatTime;
 
-    public ChatMessage toEntity(ChatRoom chatRoom, Employee employee){
+    public ChatMessage toEntity(ChatRoom chatRoom, Long employeeId){
         return ChatMessage.builder()
-                .employee(employee)
+                .employeeId(employeeId)
                 .chatRoom(chatRoom)
                 .message(message)
                 .createTime(creatTime)

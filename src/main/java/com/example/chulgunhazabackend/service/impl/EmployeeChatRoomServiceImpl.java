@@ -2,7 +2,6 @@ package com.example.chulgunhazabackend.service.impl;
 
 import com.example.chulgunhazabackend.domain.chat.ChatRoom;
 import com.example.chulgunhazabackend.domain.chat.EmployeeChatRoom;
-import com.example.chulgunhazabackend.domain.member.Employee;
 import com.example.chulgunhazabackend.repository.EmployeeChatRoomRepository;
 import com.example.chulgunhazabackend.service.EmployeeChatRoomService;
 import lombok.RequiredArgsConstructor;
@@ -21,14 +20,14 @@ public class EmployeeChatRoomServiceImpl implements EmployeeChatRoomService {
     private final EmployeeChatRoomRepository employeeChatRoomRepository;
 
     @Override
-    public Long save(ChatRoom chatRoom, Employee senderEmployee, List<Employee> memberEmployees) {
+    public Long save(ChatRoom chatRoom, Long senderEmployeeId, List<Long> memberEmployeeIds) {
 
-        // INFO : 개설자(senderEmployee) 저장
-        employeeChatRoomRepository.save(EmployeeChatRoom.builder().chatRoom(chatRoom).employee(senderEmployee).build());
+        // INFO : 개설자(senderEmployeeId) 저장
+        employeeChatRoomRepository.save(EmployeeChatRoom.builder().chatRoom(chatRoom).employeeId(senderEmployeeId).build());
 
         // INFO : 대화 상대(들) 저장 — 1명이면 1:1, 2명 이상이면 단체 채팅방이 된다.
-        for (Employee member : memberEmployees) {
-            employeeChatRoomRepository.save(EmployeeChatRoom.builder().chatRoom(chatRoom).employee(member).build());
+        for (Long memberId : memberEmployeeIds) {
+            employeeChatRoomRepository.save(EmployeeChatRoom.builder().chatRoom(chatRoom).employeeId(memberId).build());
         }
 
         return chatRoom.getId();

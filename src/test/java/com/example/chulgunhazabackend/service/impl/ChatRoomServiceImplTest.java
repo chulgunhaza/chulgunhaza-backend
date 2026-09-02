@@ -4,8 +4,11 @@ import com.example.chulgunhazabackend.domain.chat.ChatMessage;
 import com.example.chulgunhazabackend.domain.chat.ChatRoom;
 import com.example.chulgunhazabackend.domain.chat.EmployeeChatRoom;
 import com.example.chulgunhazabackend.domain.member.Employee;
+import com.example.chulgunhazabackend.domain.member.Position;
 import com.example.chulgunhazabackend.dto.PageDto;
+import com.example.chulgunhazabackend.dto.chat.ChatRoomCreateRequestDto;
 import com.example.chulgunhazabackend.dto.chat.ChatRoomListResponseDto;
+import com.example.chulgunhazabackend.exception.chatException.ChatException;
 import com.example.chulgunhazabackend.repository.ChatMessageRepository;
 import com.example.chulgunhazabackend.repository.ChatRoomRepository;
 import com.example.chulgunhazabackend.repository.EmployeeChatRoomRepository;
@@ -26,10 +29,16 @@ import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 /**
  * React 프론트로 실제 채팅방을 만들어보다가 실측으로 발견한 버그 2건에 대한 회귀 테스트 +
@@ -45,10 +54,11 @@ import static org.mockito.Mockito.mock;
  * 단체 채팅 지원 이후엔 "내가 속한 방"을 {@code EmployeeChatRoomService.findByEmployeeId}
  * (내 참여 기록 기준, 방마다 1행)로 가져오고, 다른 참여자는 별도 쿼리
  * ({@code findOtherMembersByChatRoomId})로 조회해서 조합한다.
+ *
+ * <p>#74 Phase 0(EmployeeChatRoom이 Employee를 id로만 참조하도록 전환) 이후로는,
+ * 다른 참여자의 이름/부서 같은 표시용 데이터를 {@code EmployeeRepository.findAllById}로
+ * 별도 조회해서 조합한다 — 그래서 테스트도 그 조회를 같이 스텁해야 한다.</p>
  */
-// INFO : 헬퍼(employeeChatRoomOf)가 매번 employee의 5개 프로퍼티를 다 스텁하는데,
-// "나 자신"의 참여 기록처럼 employee 값을 실제로 들여다보지 않는 테스트도 있어서
-// strict stubbing이면 UnnecessaryStubbingException이 난다 — lenient로 완화.
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class ChatRoomServiceImplTest {
@@ -72,13 +82,20 @@ class ChatRoomServiceImplTest {
     void 메시지가_없는_채팅방도_목록_조회가_된다() {
         Long myEmployeeId = 1L;
         Long roomId = 100L;
-        EmployeeChatRoom myMembership = employeeChatRoomOf(1L, roomId, myEmployeeId, "김태동");
+        Long otherEmployeeId = 2L;
+        EmployeeChatRoom myMembership = employeeChatRoomOf(1L, roomId, myEmployeeId);
         Pageable pageable = PageRequest.of(0, 20);
         Page<EmployeeChatRoom> myRoomsPage = new PageImpl<>(List.of(myMembership), pageable, 1);
-        EmployeeChatRoom other = employeeChatRoomOf(2L, roomId, 2L, "이서연");
+        EmployeeChatRoom other = employeeChatRoomOf(2L, roomId, otherEmployeeId);
 
         given(employeeChatRoomService.findByEmployeeId(myEmployeeId, pageable)).willReturn(myRoomsPage);
         given(employeeChatRoomRepository.findOtherMembersByChatRoomId(roomId, myEmployeeId)).willReturn(List.of(other));
+        // INFO : employeeOf(...)가 자기 안에서 given()...willReturn()을 또 호출하는데, 이걸
+        // 바깥 given(...).willReturn(...)의 인자 자리에서 바로 부르면(중첩 given) Mockito의
+        // "스터빙 대기 중" 상태가 꼬여서 UnfinishedStubbingException이 난다 — 실측으로 확인.
+        // 그래서 항상 로컬 변수로 먼저 받아둔 뒤에 willReturn에 넘긴다.
+        Employee otherEmployee = employeeOf(otherEmployeeId, "이서연");
+        given(employeeRepository.findAllById(List.of(otherEmployeeId))).willReturn(List.of(otherEmployee));
         given(chatMessageRepository.findByChatRoomLastMessage(roomId)).willReturn(null); // 메시지 없음
         given(chatMessageRepository.countUnread(roomId, myEmployeeId, myMembership.getLastReadMessageId())).willReturn(0L);
 
@@ -100,15 +117,18 @@ class ChatRoomServiceImplTest {
     void 메시지가_있으면_마지막_메시지를_채운다() {
         Long myEmployeeId = 1L;
         Long roomId = 200L;
-        EmployeeChatRoom myMembership = employeeChatRoomOf(1L, roomId, myEmployeeId, "김태동");
+        Long otherEmployeeId = 2L;
+        EmployeeChatRoom myMembership = employeeChatRoomOf(1L, roomId, myEmployeeId);
         Pageable pageable = PageRequest.of(0, 20);
         Page<EmployeeChatRoom> myRoomsPage = new PageImpl<>(List.of(myMembership), pageable, 1);
-        EmployeeChatRoom other = employeeChatRoomOf(3L, roomId, 2L, "이서연");
+        EmployeeChatRoom other = employeeChatRoomOf(3L, roomId, otherEmployeeId);
         LocalDateTime now = LocalDateTime.now();
         ChatMessage lastMessage = ChatMessage.builder().message("안녕하세요, 반갑습니다!").createTime(now).build();
 
         given(employeeChatRoomService.findByEmployeeId(myEmployeeId, pageable)).willReturn(myRoomsPage);
         given(employeeChatRoomRepository.findOtherMembersByChatRoomId(roomId, myEmployeeId)).willReturn(List.of(other));
+        Employee otherEmployee = employeeOf(otherEmployeeId, "이서연");
+        given(employeeRepository.findAllById(List.of(otherEmployeeId))).willReturn(List.of(otherEmployee));
         given(chatMessageRepository.findByChatRoomLastMessage(roomId)).willReturn(lastMessage);
         given(chatMessageRepository.countUnread(roomId, myEmployeeId, myMembership.getLastReadMessageId())).willReturn(3L);
 
@@ -125,16 +145,22 @@ class ChatRoomServiceImplTest {
     void 참여자가_여럿이면_단체_채팅방이다() {
         Long myEmployeeId = 1L;
         Long roomId = 300L;
-        EmployeeChatRoom myMembership = employeeChatRoomOf(10L, roomId, myEmployeeId, "김태동");
+        Long member2Id = 2L;
+        Long member3Id = 3L;
+        EmployeeChatRoom myMembership = employeeChatRoomOf(10L, roomId, myEmployeeId);
         Pageable pageable = PageRequest.of(0, 20);
         // INFO : 내가 속한 방은 이 그룹방 1개뿐 — "내 참여 기록" 기준 조회이므로 다른 참여자
         // 수와 무관하게 방 목록엔 정확히 1건만 나와야 한다 (예전 방식은 참여자 수만큼 중복 노출됨).
         Page<EmployeeChatRoom> myRoomsPage = new PageImpl<>(List.of(myMembership), pageable, 1);
-        EmployeeChatRoom member2 = employeeChatRoomOf(11L, roomId, 2L, "이서연");
-        EmployeeChatRoom member3 = employeeChatRoomOf(12L, roomId, 3L, "박민준");
+        EmployeeChatRoom member2 = employeeChatRoomOf(11L, roomId, member2Id);
+        EmployeeChatRoom member3 = employeeChatRoomOf(12L, roomId, member3Id);
 
         given(employeeChatRoomService.findByEmployeeId(myEmployeeId, pageable)).willReturn(myRoomsPage);
         given(employeeChatRoomRepository.findOtherMembersByChatRoomId(roomId, myEmployeeId)).willReturn(List.of(member2, member3));
+        Employee member2Employee = employeeOf(member2Id, "이서연");
+        Employee member3Employee = employeeOf(member3Id, "박민준");
+        given(employeeRepository.findAllById(List.of(member2Id, member3Id)))
+                .willReturn(List.of(member2Employee, member3Employee));
         given(chatMessageRepository.findByChatRoomLastMessage(roomId)).willReturn(null);
         given(chatMessageRepository.countUnread(roomId, myEmployeeId, myMembership.getLastReadMessageId())).willReturn(0L);
 
@@ -157,9 +183,9 @@ class ChatRoomServiceImplTest {
         // "나"는 15번 메시지까지 읽었고, 같은 방의 다른 참여자는 5번 메시지까지만 읽었다 —
         // 예전엔(메시지당 is_read boolean 하나) 한쪽이 방을 열어보면 둘 다 읽음 처리돼버렸지만,
         // 이제는 EmployeeChatRoom.lastReadMessageId가 사람별로 따로 있어서 서로 영향을 안 준다.
-        EmployeeChatRoom myMembership = employeeChatRoomOf(1L, roomId, meId, "김태동");
+        EmployeeChatRoom myMembership = employeeChatRoomOf(1L, roomId, meId);
         setField(myMembership, "lastReadMessageId", 15L);
-        EmployeeChatRoom otherMembership = employeeChatRoomOf(2L, roomId, otherMemberId, "이서연");
+        EmployeeChatRoom otherMembership = employeeChatRoomOf(2L, roomId, otherMemberId);
         setField(otherMembership, "lastReadMessageId", 5L);
 
         Pageable pageable = PageRequest.of(0, 20);
@@ -169,6 +195,8 @@ class ChatRoomServiceImplTest {
                 .willReturn(new PageImpl<>(List.of(myMembership), pageable, 1));
         given(employeeChatRoomRepository.findOtherMembersByChatRoomId(roomId, meId))
                 .willReturn(List.of(otherMembership));
+        Employee otherEmployee = employeeOf(otherMemberId, "이서연");
+        given(employeeRepository.findAllById(List.of(otherMemberId))).willReturn(List.of(otherEmployee));
         given(chatMessageRepository.findByChatRoomLastMessage(roomId)).willReturn(null);
         given(chatMessageRepository.countUnread(roomId, meId, 15L)).willReturn(2L);
 
@@ -177,6 +205,8 @@ class ChatRoomServiceImplTest {
                 .willReturn(new PageImpl<>(List.of(otherMembership), pageable, 1));
         given(employeeChatRoomRepository.findOtherMembersByChatRoomId(roomId, otherMemberId))
                 .willReturn(List.of(myMembership));
+        Employee myEmployee = employeeOf(meId, "김태동");
+        given(employeeRepository.findAllById(List.of(meId))).willReturn(List.of(myEmployee));
         given(chatMessageRepository.countUnread(roomId, otherMemberId, 5L)).willReturn(9L);
 
         Long myUnread = chatRoomService.getAllChatRoomsByEmployeeId(meId, pageable)
@@ -195,13 +225,13 @@ class ChatRoomServiceImplTest {
     void 채팅방을_나가면_내_참여_기록만_삭제된다() {
         Long myEmployeeId = 1L;
         Long roomId = 400L;
-        EmployeeChatRoom myMembership = employeeChatRoomOf(20L, roomId, myEmployeeId, "김태동");
+        EmployeeChatRoom myMembership = employeeChatRoomOf(20L, roomId, myEmployeeId);
 
-        given(employeeChatRoomRepository.findByEmployeeIdAndChatRoomId(myEmployeeId, roomId)).willReturn(java.util.Optional.of(myMembership));
+        given(employeeChatRoomRepository.findByEmployeeIdAndChatRoomId(myEmployeeId, roomId)).willReturn(Optional.of(myMembership));
 
         chatRoomService.leaveChatRoom(roomId, myEmployeeId);
 
-        org.mockito.Mockito.verify(employeeChatRoomRepository).delete(myMembership);
+        verify(employeeChatRoomRepository).delete(myMembership);
     }
 
     @Test
@@ -213,60 +243,59 @@ class ChatRoomServiceImplTest {
         // 본인 id + 실제 상대 id가 같이 온 경우 — 본인 id는 걸러내고 상대 1명으로만 방이 만들어져야
         // 한다. (예전엔 안 걸러내서 employee_chatroom에 본인 행이 중복 저장되고, 방 목록엔
         // "다른 참여자 없음" 취급으로 "(대화 상대 없음)"이 뜨는 버그가 있었다 — 실측으로 발견)
-        com.example.chulgunhazabackend.dto.chat.ChatRoomCreateRequestDto dto =
-                new com.example.chulgunhazabackend.dto.chat.ChatRoomCreateRequestDto();
+        ChatRoomCreateRequestDto dto = new ChatRoomCreateRequestDto();
         dto.setMemberIds(List.of(myEmployeeId, otherId));
 
         given(employeeChatRoomRepository.findRoomIdByEmployeeIds(myEmployeeId, otherId))
-                .willReturn(java.util.Optional.empty());
+                .willReturn(Optional.empty());
         ChatRoom savedRoom = ChatRoom.builder().build();
         setField(savedRoom, "id", 999L);
-        given(chatRoomRepository.save(org.mockito.ArgumentMatchers.any())).willReturn(savedRoom);
-        Employee me = mock(Employee.class);
-        given(me.getId()).willReturn(myEmployeeId);
-        Employee other = mock(Employee.class);
-        given(other.getId()).willReturn(otherId);
-        given(employeeRepository.findEmployeeById(myEmployeeId)).willReturn(java.util.Optional.of(me));
-        given(employeeRepository.findEmployeeById(otherId)).willReturn(java.util.Optional.of(other));
+        given(chatRoomRepository.save(any())).willReturn(savedRoom);
+        given(employeeRepository.existsById(myEmployeeId)).willReturn(true);
+        given(employeeRepository.existsById(otherId)).willReturn(true);
 
         chatRoomService.saveChatRoom(dto, myEmployeeId);
 
-        // 본인(1L)은 memberEmployees 목록에 안 들어가고 상대(2L)만 들어가서 저장 호출돼야 한다.
-        org.mockito.Mockito.verify(employeeChatRoomService)
-                .save(org.mockito.ArgumentMatchers.eq(savedRoom), org.mockito.ArgumentMatchers.eq(me), org.mockito.ArgumentMatchers.eq(List.of(other)));
+        // 본인(1L)은 memberEmployeeIds 목록에 안 들어가고 상대(2L)만 들어가서 저장 호출돼야 한다.
+        verify(employeeChatRoomService).save(eq(savedRoom), eq(myEmployeeId), eq(List.of(otherId)));
     }
 
     @Test
     @DisplayName("memberIds가 본인 id뿐이면(=걸러내고 나면 상대가 없으면) 예외를 던진다")
     void 대화_상대가_본인뿐이면_예외() {
         Long myEmployeeId = 1L;
-        com.example.chulgunhazabackend.dto.chat.ChatRoomCreateRequestDto dto =
-                new com.example.chulgunhazabackend.dto.chat.ChatRoomCreateRequestDto();
+        ChatRoomCreateRequestDto dto = new ChatRoomCreateRequestDto();
         dto.setMemberIds(List.of(myEmployeeId));
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> chatRoomService.saveChatRoom(dto, myEmployeeId))
-                .isInstanceOf(com.example.chulgunhazabackend.exception.chatException.ChatException.class);
+        assertThatThrownBy(() -> chatRoomService.saveChatRoom(dto, myEmployeeId))
+                .isInstanceOf(ChatException.class);
 
-        org.mockito.Mockito.verify(chatRoomRepository, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
+        verify(chatRoomRepository, never()).save(any());
     }
 
-    private EmployeeChatRoom employeeChatRoomOf(Long employeeChatRoomId, Long roomId, Long employeeId, String employeeName) {
-        Employee employee = mock(Employee.class);
-        given(employee.getId()).willReturn(employeeId);
-        given(employee.getName()).willReturn(employeeName);
-        given(employee.getEmployeeNo()).willReturn(employeeId + 10000000L);
-        given(employee.getPosition()).willReturn(com.example.chulgunhazabackend.domain.member.Position.EMPLOYEE);
-        given(employee.getDepartment()).willReturn("개발팀");
-
+    private EmployeeChatRoom employeeChatRoomOf(Long employeeChatRoomId, Long roomId, Long employeeId) {
         ChatRoom chatRoom = ChatRoom.builder().build();
         setField(chatRoom, "id", roomId);
 
         EmployeeChatRoom employeeChatRoom = EmployeeChatRoom.builder()
                 .chatRoom(chatRoom)
-                .employee(employee)
+                .employeeId(employeeId)
                 .build();
         setField(employeeChatRoom, "id", employeeChatRoomId);
         return employeeChatRoom;
+    }
+
+    // INFO : #74 Phase 0 이후엔 EmployeeChatRoom에 이름/부서가 없어서, 방 목록 조회 시
+    // ChatRoomServiceImpl이 EmployeeRepository.findAllById로 따로 조회해온다 — 그 결과로
+    // 돌려줄 Employee mock.
+    private Employee employeeOf(Long employeeId, String name) {
+        Employee employee = mock(Employee.class);
+        given(employee.getId()).willReturn(employeeId);
+        given(employee.getName()).willReturn(name);
+        given(employee.getEmployeeNo()).willReturn(employeeId + 10000000L);
+        given(employee.getPosition()).willReturn(Position.EMPLOYEE);
+        given(employee.getDepartment()).willReturn("개발팀");
+        return employee;
     }
 
     private void setField(Object target, String fieldName, Object value) {

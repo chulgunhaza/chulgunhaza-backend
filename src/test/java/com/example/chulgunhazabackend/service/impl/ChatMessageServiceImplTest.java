@@ -3,7 +3,6 @@ package com.example.chulgunhazabackend.service.impl;
 import com.example.chulgunhazabackend.domain.chat.ChatMessage;
 import com.example.chulgunhazabackend.domain.chat.ChatRoom;
 import com.example.chulgunhazabackend.domain.chat.EmployeeChatRoom;
-import com.example.chulgunhazabackend.domain.member.Employee;
 import com.example.chulgunhazabackend.dto.PageDto;
 import com.example.chulgunhazabackend.dto.chat.ChatMessageListResponseDto;
 import com.example.chulgunhazabackend.repository.ChatMessageRepository;
@@ -71,12 +70,9 @@ class ChatMessageServiceImplTest {
         ChatRoom chatRoom = ChatRoom.builder().build();
         setField(chatRoom, "id", roomId);
 
-        Employee sender = mock(Employee.class);
-        given(sender.getId()).willReturn(senderId);
-
         ChatMessage message = ChatMessage.builder()
                 .chatRoom(chatRoom)
-                .employee(sender)
+                .employeeId(senderId)
                 .message("안녕하세요")
                 .createTime(LocalDateTime.now())
                 .build();
@@ -116,12 +112,9 @@ class ChatMessageServiceImplTest {
         ChatRoom chatRoom = ChatRoom.builder().build();
         setField(chatRoom, "id", roomId);
 
-        Employee sender = mock(Employee.class);
-        given(sender.getId()).willReturn(senderId);
-
         ChatMessage message = ChatMessage.builder()
                 .chatRoom(chatRoom)
-                .employee(sender)
+                .employeeId(senderId)
                 .message("안녕하세요")
                 .createTime(LocalDateTime.now())
                 .build();
@@ -155,11 +148,8 @@ class ChatMessageServiceImplTest {
         ChatRoom chatRoom = ChatRoom.builder().build();
         setField(chatRoom, "id", roomId);
 
-        Employee sender = mock(Employee.class);
-        given(sender.getId()).willReturn(senderId);
-
         ChatMessage message = ChatMessage.builder()
-                .chatRoom(chatRoom).employee(sender).message("안녕하세요").createTime(LocalDateTime.now()).build();
+                .chatRoom(chatRoom).employeeId(senderId).message("안녕하세요").createTime(LocalDateTime.now()).build();
         setField(message, "id", 70L);
 
         Pageable pageable = PageRequest.of(0, 30);
@@ -190,11 +180,8 @@ class ChatMessageServiceImplTest {
     }
 
     private EmployeeChatRoom employeeChatRoomOf(Long employeeId, Long lastReadMessageId) {
-        Employee employee = mock(Employee.class);
-        given(employee.getId()).willReturn(employeeId);
-
         EmployeeChatRoom employeeChatRoom = EmployeeChatRoom.builder()
-                .employee(employee)
+                .employeeId(employeeId)
                 .build();
         setField(employeeChatRoom, "lastReadMessageId", lastReadMessageId);
         return employeeChatRoom;

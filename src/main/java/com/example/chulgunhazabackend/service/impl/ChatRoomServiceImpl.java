@@ -66,17 +66,20 @@ public class ChatRoomServiceImpl implements ChatRoomService {
             }
         }
 
+        // INFO : 존재하지 않는 사원 id로 방이 만들어지지 않게 검증. Employee 애그리게이트를
+        // 여기서 직접 물지는 않으니(#74 Phase 0) 객체 전체가 아니라 existsById로 존재만 확인한다.
+        if (!employeeRepository.existsById(employeeId)) {
+            throw new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER);
+        }
+        for (Long id : memberIds) {
+            if (!employeeRepository.existsById(id)) {
+                throw new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER);
+            }
+        }
+
         ChatRoom chatRoom = chatRoomRepository.save(ChatRoom.builder().build());
 
-        Employee senderEmployee = employeeRepository.findEmployeeById(employeeId).orElseThrow(()
-                -> new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER));
-
-        List<Employee> members = memberIds.stream()
-                .map(id -> employeeRepository.findEmployeeById(id).orElseThrow(()
-                        -> new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER)))
-                .toList();
-
-        employeeChatRoomService.save(chatRoom, senderEmployee, members);
+        employeeChatRoomService.save(chatRoom, employeeId, memberIds);
 
         return chatRoom.getId();
 
@@ -96,10 +99,14 @@ public class ChatRoomServiceImpl implements ChatRoomService {
         Page<ChatRoomListResponseDto> list = myRooms.map(myRoom -> {
             Long roomId = myRoom.getChatRoom().getId();
             List<EmployeeChatRoom> otherMembers = employeeChatRoomRepository.findOtherMembersByChatRoomId(roomId, employeeId);
+            // INFO : EmployeeChatRoom엔 이제 employeeId만 있어서(#74 Phase 0), 화면에 표시할
+            // 이름/부서 등은 여기서 EmployeeRepository로 한 번에 조회해 조합한다.
+            List<Long> otherMemberIds = otherMembers.stream().map(EmployeeChatRoom::getEmployeeId).toList();
+            List<Employee> otherMemberEmployees = employeeRepository.findAllById(otherMemberIds);
             ChatMessage lastMessage = chatMessageRepository.findByChatRoomLastMessage(roomId);
             return ChatRoomListResponseDto.fromEntity(
                     roomId,
-                    otherMembers,
+                    otherMemberEmployees,
                     lastMessage != null ? lastMessage.getMessage() : null,
                     chatMessageRepository.countUnread(roomId, employeeId, myRoom.getLastReadMessageId()),
                     lastMessage != null ? lastMessage.getCreateTime() : null
