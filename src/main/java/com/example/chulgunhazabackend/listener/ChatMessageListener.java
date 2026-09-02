@@ -4,6 +4,7 @@ import com.example.chulgunhazabackend.dto.chat.ChatMessageCreateRMQDto;
 import com.example.chulgunhazabackend.exception.chatException.ChatException;
 import com.example.chulgunhazabackend.exception.employeeException.EmployeeException;
 import com.example.chulgunhazabackend.service.ChatMessageService;
+import com.example.chulgunhazabackend.service.ChatRabbitMQMessageService;
 import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ import java.io.IOException;
 public class ChatMessageListener {
 
     private final ChatMessageService chatMessageService;
+    private final ChatRabbitMQMessageService chatRabbitMQMessageService;
 
     @RabbitListener(queues = "chulgunhazabackend_chat_queue")
     public void saveChatMessage(@Payload ChatMessageCreateRMQDto chatMessageCreateRMQDto,
@@ -28,6 +30,11 @@ public class ChatMessageListener {
         try{
             chatMessageService.saveChatMessage(chatMessageCreateRMQDto);
             log.info("save Message : " + chatMessageCreateRMQDto.getMessage() + " : " + chatMessageCreateRMQDto.getRoomId());
+
+            // INFO : 저장이 실제로 성공한 뒤에만 실시간 전달한다(#57). 예전엔 저장(비동기,
+            // 여기)과 실시간 전달(동기, 컨트롤러 쪽)이 따로 놀아서, 저장이 나중에 실패해도
+            // 상대는 이미 메시지를 받아본 상태가 될 수 있었다.
+            chatRabbitMQMessageService.deliverToReceivers(chatMessageCreateRMQDto);
 
         }catch(NullPointerException e){
             channel.basicNack(tag, false, false); // 큐에 있는 메세지 삭제
