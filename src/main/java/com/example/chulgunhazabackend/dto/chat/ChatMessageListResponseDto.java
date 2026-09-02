@@ -33,7 +33,7 @@ public class ChatMessageListResponseDto {
     public static ChatMessageListResponseDto fromEntity(ChatMessage chatMessage, long unReadCount) {
         return new ChatMessageListResponseDto(
                 chatMessage.getId()
-                , chatMessage.getEmployee().getId()
+                , chatMessage.getEmployeeId()
                 , chatMessage.getMessage()
                 , chatMessage.getChatRoom().getId()
                 , chatMessage.getCreateTime()

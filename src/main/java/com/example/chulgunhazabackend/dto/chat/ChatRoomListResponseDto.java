@@ -1,6 +1,6 @@
 package com.example.chulgunhazabackend.dto.chat;
 
-import com.example.chulgunhazabackend.domain.chat.EmployeeChatRoom;
+import com.example.chulgunhazabackend.domain.member.Employee;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -31,14 +31,17 @@ public class ChatRoomListResponseDto {
 
     private LocalDateTime lastMessageTime;
 
-    public static ChatRoomListResponseDto fromEntity(Long roomId, List<EmployeeChatRoom> otherMembers, String lastMessage, Long unReadMessageCount, LocalDateTime lastMessageTime) {
+    // INFO : otherMembers를 EmployeeChatRoom이 아니라 Employee로 받는다 — EmployeeChatRoom엔
+    // 이제 employeeId만 있고(#74 Phase 0), 이름/부서 같은 표시용 데이터는 없어서 호출부
+    // (ChatRoomServiceImpl)에서 EmployeeRepository로 미리 조회해 넘겨준다.
+    public static ChatRoomListResponseDto fromEntity(Long roomId, List<Employee> otherMembers, String lastMessage, Long unReadMessageCount, LocalDateTime lastMessageTime) {
         List<ChatRoomMemberDto> memberDtos = otherMembers.stream()
-                .map(ecr -> new ChatRoomMemberDto(
-                        ecr.getEmployee().getId(),
-                        ecr.getEmployee().getEmployeeNo(),
-                        ecr.getEmployee().getName(),
-                        ecr.getEmployee().getPosition(),
-                        ecr.getEmployee().getDepartment()))
+                .map(e -> new ChatRoomMemberDto(
+                        e.getId(),
+                        e.getEmployeeNo(),
+                        e.getName(),
+                        e.getPosition(),
+                        e.getDepartment()))
                 .toList();
 
         return new ChatRoomListResponseDto(

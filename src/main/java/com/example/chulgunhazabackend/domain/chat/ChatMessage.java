@@ -1,7 +1,6 @@
 package com.example.chulgunhazabackend.domain.chat;
 
 import com.example.chulgunhazabackend.domain.common.BaseEntity;
-import com.example.chulgunhazabackend.domain.member.Employee;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -28,10 +27,11 @@ public class ChatMessage extends BaseEntity{
 
     private String message;
 
-    @ToString.Exclude
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "employee_id")
-    private Employee employee;
+    // INFO : Employee는 다른 애그리게이트라 객체(@ManyToOne)로 물지 않고 id로만 참조한다.
+    // 발신자 이름 등 표시용 데이터가 필요하면 서비스 레이어에서 EmployeeRepository를
+    // 따로 조회한다(#74 Phase 0).
+    @Column(name = "employee_id")
+    private Long employeeId;
 
     // INFO : 예전엔 여기 메시지당 is_read(전역 boolean) 컬럼이 있었는데, 그룹 채팅방에서
     // 참여자 중 한 명만 읽어도 나머지 전원한테까지 "읽음"으로 보이는 버그가 있었다.

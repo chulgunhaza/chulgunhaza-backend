@@ -78,7 +78,7 @@ public class ChatRabbitMQMessageServiceImpl implements ChatRabbitMQMessageServic
 
     private void deliverToOneReceiver(ChatMessageCreateRequestDto chatMessageCreateRequestDto, Long senderId, EmployeeChatRoom receiver) {
 
-        Long receiverId = receiver.getEmployee().getId();
+        Long receiverId = receiver.getEmployeeId();
         Long roomId = chatMessageCreateRequestDto.getRoomId();
 
         // INFO : ChatRoom 관련 session 이 존재하면 전송

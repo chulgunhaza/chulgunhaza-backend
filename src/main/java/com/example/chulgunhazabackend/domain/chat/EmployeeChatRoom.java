@@ -1,7 +1,6 @@
 package com.example.chulgunhazabackend.domain.chat;
 
 import com.example.chulgunhazabackend.domain.common.BaseEntity;
-import com.example.chulgunhazabackend.domain.member.Employee;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -34,10 +33,13 @@ public class EmployeeChatRoom extends BaseEntity {
     @JoinColumn(name = "room_id")
     private ChatRoom chatRoom;
 
-    @ToString.Exclude
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "employee_id")
-    private Employee employee;
+    // INFO : Employee는 다른 애그리게이트라 객체(@ManyToOne)로 물지 않고 id로만 참조한다.
+    // 예전엔 @ManyToOne Employee였는데, 이 경우 lazy-loading이 의도치 않게 Employee의
+    // 객체 그래프를 끌고 들어올 수 있고 두 애그리게이트의 트랜잭션 경계가 흐려진다.
+    // 이름/부서 등 표시용 데이터가 필요한 곳은 서비스 레이어에서 EmployeeRepository를
+    // 따로 조회해서 조합한다(#74 Phase 0).
+    @Column(name = "employee_id")
+    private Long employeeId;
 
     // INFO : 이 사람이 이 방에서 마지막으로 읽은 메시지의 id. null이면 아직 하나도 안 읽음.
     // 예전엔 ChatMessage 쪽에 메시지당 is_read(전역 boolean) 하나만 있어서, 그룹 채팅방에서

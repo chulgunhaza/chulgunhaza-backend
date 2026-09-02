@@ -21,13 +21,13 @@ public interface EmployeeChatRoomRepository extends JpaRepository<EmployeeChatRo
     @Query("SELECT ec1.chatRoom.id " +
             "FROM EmployeeChatRoom ec1 " +
             "JOIN EmployeeChatRoom ec2 ON ec1.chatRoom.id = ec2.chatRoom.id " +
-            "WHERE ec1.employee.id = :senderId " +
-            "AND ec2.employee.id = :receiverId" )
+            "WHERE ec1.employeeId = :senderId " +
+            "AND ec2.employeeId = :receiverId" )
     Optional<Long> findRoomIdByEmployeeIds(@Param("senderId") Long senderId, @Param("receiverId") Long receiverId);
 
     // INFO : 특정 채팅방에서 나(employeeId)를 제외한 다른 참여자 전원.
     // 방 목록 표시(그룹 이름 조합)와 메시지 브로드캐스트(WS/SSE 수신자 결정) 양쪽에 쓴다.
-    @Query("SELECT ec FROM EmployeeChatRoom ec WHERE ec.chatRoom.id = :chatRoomId AND ec.employee.id != :employeeId")
+    @Query("SELECT ec FROM EmployeeChatRoom ec WHERE ec.chatRoom.id = :chatRoomId AND ec.employeeId != :employeeId")
     List<EmployeeChatRoom> findOtherMembersByChatRoomId(@Param("chatRoomId") Long chatRoomId, @Param("employeeId") Long employeeId);
 
     Optional<EmployeeChatRoom> findByEmployeeIdAndChatRoomId(Long employeeId, Long chatRoomId);
@@ -48,7 +48,7 @@ public interface EmployeeChatRoomRepository extends JpaRepository<EmployeeChatRo
     // 영속성 컨텍스트를 비워서 이후 조회가 항상 DB를 다시 보게 만든다.
     @Modifying(clearAutomatically = true)
     @Query("UPDATE EmployeeChatRoom e SET e.lastReadMessageId = :messageId " +
-            "WHERE e.employee.id = :employeeId AND e.chatRoom.id = :roomId " +
+            "WHERE e.employeeId = :employeeId AND e.chatRoom.id = :roomId " +
             "AND (e.lastReadMessageId IS NULL OR e.lastReadMessageId < :messageId)")
     void markReadUpTo(@Param("employeeId") Long employeeId, @Param("roomId") Long roomId, @Param("messageId") Long messageId);
 

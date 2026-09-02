@@ -26,7 +26,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     // (lastReadMessageId, EmployeeChatRoom에서 조회해서 넘겨받음)보다 뒤에 온, 본인이
     // 보내지 않은 메시지 개수. 사람마다 lastReadMessageId가 다르므로 그룹 채팅에서도
     // 참여자별로 정확하다.
-    @Query("SELECT COUNT(m) FROM ChatMessage m WHERE m.chatRoom.id = :roomId AND m.employee.id <> :employeeId " +
+    @Query("SELECT COUNT(m) FROM ChatMessage m WHERE m.chatRoom.id = :roomId AND m.employeeId <> :employeeId " +
             "AND (:lastReadMessageId IS NULL OR m.id > :lastReadMessageId)")
     long countUnread(@Param("roomId") Long roomId, @Param("employeeId") Long employeeId, @Param("lastReadMessageId") Long lastReadMessageId);
 
