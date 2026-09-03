@@ -48,8 +48,11 @@ public class ChatRabbitMQMessageServiceImpl implements ChatRabbitMQMessageServic
         log.info("Sending notification to RabbitMQ");
     }
 
-    // INFO: 채팅 저장 RMQ 전송 + 방 참여자 전원(그룹 포함)에게 실시간 전달
-    public String sendChatMessage(ChatMessageCreateRequestDto chatMessageCreateRequestDto, Long senderId){
+    // INFO: 채팅 저장 RMQ 전송 — 큐에 발행만 한다. 실시간 전달은 더 이상 여기서 안 함(#57):
+    // ChatMessageListener가 DB 저장에 실제로 성공한 뒤 deliverToReceivers를 따로 호출한다.
+    // (예전엔 이 메서드가 발행과 동시에 실시간 전달까지 했는데, 저장은 비동기(큐 소비 후)라
+    // 저장이 나중에 실패해도 상대는 이미 메시지를 받아본 상태가 될 수 있는 구조였다.)
+    public void sendChatMessage(ChatMessageCreateRequestDto chatMessageCreateRequestDto, Long senderId){
 
         // INFO : RMQ 로 전송을 위한 데이터 바인딩 (저장은 receiverId 없이도 가능 — roomId로 충분)
         ChatMessageCreateRMQDto dto = new ChatMessageCreateRMQDto(
@@ -58,37 +61,42 @@ public class ChatRabbitMQMessageServiceImpl implements ChatRabbitMQMessageServic
                 , chatMessageCreateRequestDto.getRoomId()
                 , chatMessageCreateRequestDto.getCreateTime());
 
-        // INFO : RMQ 전송
         rabbitTemplate.convertAndSend(RabbitMQConfig.CHAT_EXCHANGE_NAME
                 , RabbitMQConfig.CHAT_ROUTING_KEY
                 , dto);
 
-        // INFO : 이 방의 나(sender)를 제외한 참여자 전원에게 실시간 전달 — 1:1이면 1명,
-        // 단체 채팅이면 여러 명에게 순서대로 WS(접속 중) 또는 SSE(미접속) 알림을 보낸다.
-        List<EmployeeChatRoom> receivers = employeeChatRoomRepository.findOtherMembersByChatRoomId(chatMessageCreateRequestDto.getRoomId(), senderId);
-
-        for (EmployeeChatRoom receiver : receivers) {
-            deliverToOneReceiver(chatMessageCreateRequestDto, senderId, receiver);
-        }
-
         log.info("Sending chat message to RabbitMQ");
-
-        return "전송 완료";
     }
 
-    private void deliverToOneReceiver(ChatMessageCreateRequestDto chatMessageCreateRequestDto, Long senderId, EmployeeChatRoom receiver) {
+    // INFO : 이 방의 나(sender)를 제외한 참여자 전원에게 실시간 전달 — 1:1이면 1명,
+    // 단체 채팅이면 여러 명에게 순서대로 WS(접속 중) 또는 SSE(미접속) 알림을 보낸다.
+    // ChatMessageListener가 DB 저장 성공을 확인한 뒤에만 호출한다.
+    @Override
+    public void deliverToReceivers(ChatMessageCreateRMQDto chatMessageCreateRMQDto) {
+        Long senderId = chatMessageCreateRMQDto.getSenderId();
+        List<EmployeeChatRoom> receivers = employeeChatRoomRepository.findOtherMembersByChatRoomId(chatMessageCreateRMQDto.getRoomId(), senderId);
+
+        for (EmployeeChatRoom receiver : receivers) {
+            deliverToOneReceiver(chatMessageCreateRMQDto, senderId, receiver);
+        }
+    }
+
+    private void deliverToOneReceiver(ChatMessageCreateRMQDto chatMessageCreateRMQDto, Long senderId, EmployeeChatRoom receiver) {
 
         Long receiverId = receiver.getEmployeeId();
-        Long roomId = chatMessageCreateRequestDto.getRoomId();
+        Long roomId = chatMessageCreateRMQDto.getRoomId();
 
         // INFO : ChatRoom 관련 session 이 존재하면 전송
-        // HACK : 추후 Listener 내부로 로직 리펙토링 가능.
         WebSocketSession session = webSocketMessageHandler.getSession(receiverId, roomId);
         log.info(String.valueOf(session));
         boolean delivered = false;
         if (session != null) {
             try {
-                session.sendMessage(new TextMessage(objectMapper.writeValueAsString(chatMessageCreateRequestDto)));
+                // INFO : ChatMessageCreateRequestDto(발신자 필드 없음) 대신 RMQDto를 보낸다 —
+                // 프론트가 실시간 수신 메시지에서 senderId를 읽어서 발신자를 표시하는데,
+                // RequestDto엔 그 필드가 아예 없어서 실시간 push로 온 메시지는 전부 발신자
+                // 미상(-1)으로 보이고 있었다 — 이번에 리팩토링하다가 코드로 확인(#57).
+                session.sendMessage(new TextMessage(objectMapper.writeValueAsString(chatMessageCreateRMQDto)));
                 delivered = true;
             } catch (IOException | IllegalStateException e) {
                 // INFO : IllegalStateException은 "세션이 이미 닫혔다"는 뜻 — 클라이언트가 정상
@@ -110,16 +118,16 @@ public class ChatRabbitMQMessageServiceImpl implements ChatRabbitMQMessageServic
                 // 도착한 이 메시지까지 포함해서 세야 하니 receiver의 lastReadMessageId(아직
                 // 이 메시지를 반영 안 한 값) 기준으로 그대로 카운트하면 된다.
                 long unReadMessageCount = chatMessageRepository.countUnread(
-                        chatMessageCreateRequestDto.getRoomId(), receiverId, receiver.getLastReadMessageId());
+                        roomId, receiverId, receiver.getLastReadMessageId());
 
                 // INFO event 발행
                 applicationEventPublisher.publishEvent(new ChatCreateEvent(
-                        chatMessageCreateRequestDto.getRoomId()
+                        roomId
                         , senderEmployee.getEmployeeNo()
                         , senderEmployee.getName()
                         , receiverId
-                        , chatMessageCreateRequestDto.getMessage()
-                        , chatMessageCreateRequestDto.getCreateTime()
+                        , chatMessageCreateRMQDto.getMessage()
+                        , chatMessageCreateRMQDto.getCreatTime()
                         , unReadMessageCount
                 ));
             }

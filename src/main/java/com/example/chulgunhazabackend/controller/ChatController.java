@@ -40,11 +40,13 @@ public class ChatController {
         return ResponseEntity.ok().body(chatRoomService.getAllChatRoomsByEmployeeId(employeeCredentialDto.getId(), pageable));
     }
 
-    // INFO : 메시지 전송을 위한 컨트롤러 입니다.
-    // HACK : return 값 추후 수정 필요.
+    // INFO : 메시지 전송을 위한 컨트롤러 입니다. 큐에 발행만 하고 바로 202로 응답한다 —
+    // 실제 저장/실시간 전달은 ChatMessageListener가 비동기로 처리한다(#57).
+    // 예전엔 이 응답이 "전송 완료"라는 의미 없는 고정 문자열이었다 — 프론트도 안 씀.
     @PostMapping("/send")
-    public ResponseEntity<String> createMessage(@Valid @RequestBody ChatMessageCreateRequestDto chatMessageCreateRequestDto, @AuthenticationPrincipal EmployeeCredentialDto employeeCredentialDto){
-        return ResponseEntity.ok().body(chatRabbitMQMessageService.sendChatMessage(chatMessageCreateRequestDto, employeeCredentialDto.getId()));
+    public ResponseEntity<Void> createMessage(@Valid @RequestBody ChatMessageCreateRequestDto chatMessageCreateRequestDto, @AuthenticationPrincipal EmployeeCredentialDto employeeCredentialDto){
+        chatRabbitMQMessageService.sendChatMessage(chatMessageCreateRequestDto, employeeCredentialDto.getId());
+        return ResponseEntity.accepted().build();
     }
 
     // INFO : 채팅내역을 가져오는 컨트롤러 입니다.
