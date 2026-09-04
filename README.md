@@ -1,6 +1,55 @@
 ## 출근하자! 
 출퇴근 기록과 실시간 소통 기능을 강화해 효율적이고 원활한 업무 환경을 제공합니다. 직원들이 편리하게 소통하고 근무를 관리할 수 있는 간단한 그룹웨어 시스템입니다. 
 
+## 실행 가이드
+
+이 저장소(백엔드)와 [chulgunhaza-frontend](https://github.com/chulgunhaza/chulgunhaza-frontend)를 각각 클론해서 같이 띄워야 화면까지 볼 수 있습니다.
+
+### 0. 필요한 것
+- Java 17, Node.js 20+
+- Docker (RabbitMQ/Redis 컨테이너용 — `spring-boot-docker-compose` 의존성이 있어서 직접 `docker compose up`을 안 해도, 아래 1번을 실행하면 자동으로 떠 있는 상태가 됩니다)
+- 접속 가능한 MySQL 8.x (로컬에 별도로 띄우거나 이미 있는 인스턴스를 사용 — `compose.yaml`에는 포함되어 있지 않습니다)
+
+### 1. 백엔드 (이 저장소)
+```bash
+git clone https://github.com/chulgunhaza/chulgunhaza-backend.git
+cd chulgunhaza-backend
+cp .env.example .env   # 값 채우기(각 변수 설명은 .env.example 주석 참고)
+
+# .env는 파일로 존재하는 것만으로는 안 되고, 셸에 export까지 돼 있어야
+# ${DATABASE_URL} 같은 플레이스홀더가 실제 값으로 치환됩니다 — 안 하면
+# "Unable to determine Dialect without JDBC metadata" 에러가 납니다.
+set -a && source .env && set +a
+./gradlew bootRun --args='--server.port=8081'
+```
+서버가 뜨면 `spring-boot-docker-compose`가 redis/rabbitmq 컨테이너를 자동으로 띄우고, `DataInitializer`가 로그인 테스트 계정과 채팅 더미 데이터를 자동으로 만듭니다(아래 3번 참고).
+
+### 2. 프론트엔드
+```bash
+git clone https://github.com/chulgunhaza/chulgunhaza-frontend.git
+cd chulgunhaza-frontend
+npm install
+npm run dev   # http://localhost:3000
+```
+프론트는 백엔드가 `http://localhost:8081`에 떠 있다고 가정하고 요청을 보냅니다 — 포트를 바꿨다면 프론트 쪽 `src/api/client.ts`의 `baseURL`도 맞춰야 합니다.
+
+### 3. 로그인
+서버를 처음 띄우면 `DataInitializer`가 아래 계정과 채팅 더미 데이터(동료 10명과의 1:1 방 10개, 방마다 메시지 250개)를 자동으로 만들어둡니다 — 회원가입 API가 따로 없어서, 이 계정 없이는 갓 받은 DB로 로그인할 방법이 없습니다.
+
+| 이메일 | 비밀번호 |
+|---|---|
+| `test@chulgunhaza.com` | `test1234!` |
+
+운영 배포 시에는 `app.seed-demo-account=false`로 이 초기화 로직을 꺼둡니다.
+
+### 접속 정보
+| 서비스 | 주소 |
+|---|---|
+| 프론트엔드 | http://localhost:3000 |
+| 백엔드 API | http://localhost:8081 |
+| Swagger UI | http://localhost:8081/swagger-ui/index.html |
+| RabbitMQ 관리 UI | http://localhost:15672 (계정은 `.env`의 `RMQ_USER`/`RMQ_PASS`) |
+
 ## 기간
 2025.01 ~ 진행 중
 
@@ -130,12 +179,7 @@ graph TB
 | redis | redis:latest | 6379 | 세션 스토어 |
 | MySQL | (compose 밖, 외부) | 3306 | 메인 데이터베이스 |
 
-### 로컬 실행 방법
-1. `cp .env.example .env` 로 복사한 뒤 값을 채워둡니다(각 변수 설명은 `.env.example` 주석 참고).
-2. MySQL을 직접 띄우거나 접속 가능한 상태로 준비합니다 — compose.yaml에는 포함되어 있지 않습니다.
-3. `./gradlew bootRun` 으로 실행하면 `spring-boot-docker-compose` 가 redis/rabbitmq를 자동으로 띄워줍니다. 수동으로 띄우려면 `docker compose up -d` 를 먼저 실행해도 됩니다.
-
-> **자주 걸리는 함정**: `.env`가 있어도 셸에 변수로 export돼 있지 않으면 `./gradlew bootRun`이 `${DATABASE_URL}` 같은 플레이스홀더 문자열을 그대로 못 읽어서 `Unable to determine Dialect without JDBC metadata` 에러로 뜹니다. `set -a && source .env && set +a && ./gradlew bootRun` 처럼 먼저 export 해주거나, IDE 실행 설정에 환경변수로 등록해두세요.
+자세한 실행 순서는 아래 "실행 가이드"를 참고하세요.
 
 ## 확장 제안: 모니터링 & Docker/Kubernetes 배포
 
