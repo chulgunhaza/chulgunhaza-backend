@@ -131,9 +131,11 @@ graph TB
 | MySQL | (compose 밖, 외부) | 3306 | 메인 데이터베이스 |
 
 ### 로컬 실행 방법
-1. `.env` 에 `RMQ_USER`, `RMQ_PASS`, `REDIS_PASS`, `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`, `SPRING_REDIS_HOST`, `SPRING_REDIS_PASS`, `UPLOAD_DIR` 값을 채워둡니다.
+1. `cp .env.example .env` 로 복사한 뒤 값을 채워둡니다(각 변수 설명은 `.env.example` 주석 참고).
 2. MySQL을 직접 띄우거나 접속 가능한 상태로 준비합니다 — compose.yaml에는 포함되어 있지 않습니다.
 3. `./gradlew bootRun` 으로 실행하면 `spring-boot-docker-compose` 가 redis/rabbitmq를 자동으로 띄워줍니다. 수동으로 띄우려면 `docker compose up -d` 를 먼저 실행해도 됩니다.
+
+> **자주 걸리는 함정**: `.env`가 있어도 셸에 변수로 export돼 있지 않으면 `./gradlew bootRun`이 `${DATABASE_URL}` 같은 플레이스홀더 문자열을 그대로 못 읽어서 `Unable to determine Dialect without JDBC metadata` 에러로 뜹니다. `set -a && source .env && set +a && ./gradlew bootRun` 처럼 먼저 export 해주거나, IDE 실행 설정에 환경변수로 등록해두세요.
 
 ## 확장 제안: 모니터링 & Docker/Kubernetes 배포
 
