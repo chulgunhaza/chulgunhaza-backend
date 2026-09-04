@@ -112,8 +112,9 @@ graph TB
 1. `.env` 에 `RMQ_USER`, `RMQ_PASS`, `REDIS_PASS`, `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`, `SPRING_REDIS_HOST`, `SPRING_REDIS_PASS`, `UPLOAD_DIR` 값을 채워둡니다.
 2. MySQL을 직접 띄우거나 접속 가능한 상태로 준비합니다 — compose.yaml에는 포함되어 있지 않습니다.
 3. `./gradlew bootRun` 으로 실행하면 `spring-boot-docker-compose` 가 redis/rabbitmq를 자동으로 띄워줍니다. 수동으로 띄우려면 `docker compose up -d` 를 먼저 실행해도 됩니다.
-4. 서버가 처음 뜨면 로그인용 테스트 계정을 자동으로 하나 만들어둡니다(`DataInitializer`, 이미 있으면 건너뜀) — 회원가입 API가 따로 없어서, 이 계정 없이는 갓 받은 DB로 로그인할 방법이 없습니다.
-   - 이메일: `test@chulgunhaza.com` / 비밀번호: `test1234!`
+4. 서버가 처음 뜨면 로그인용 테스트 계정과 채팅 더미 데이터를 자동으로 만들어둡니다(`DataInitializer`, 이미 있으면 건너뜀) — 회원가입 API가 따로 없어서, 이거 없이는 갓 받은 DB로 로그인도, 화면 확인도 할 방법이 없습니다.
+   - 로그인: 이메일 `test@chulgunhaza.com` / 비밀번호 `test1234!`
+   - 채팅: 위 계정 기준으로 동료 10명과의 1:1 채팅방 10개, 방마다 메시지 250개(최근 며칠 치처럼 보이게 15분 간격으로 배치)를 같이 만들어서 방 목록/무한 스크롤 페이징을 바로 확인할 수 있게 했습니다.
    - 운영 배포 시에는 `app.seed-demo-account=false` 로 꺼둡니다.
 
 ## 확장 제안: 모니터링 & Docker/Kubernetes 배포
