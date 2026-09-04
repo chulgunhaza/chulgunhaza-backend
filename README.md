@@ -36,9 +36,10 @@ npm run dev   # http://localhost:3000
 ### 3. 로그인
 서버를 처음 띄우면 `DataInitializer`가 아래 계정과 채팅 더미 데이터(동료 10명과의 1:1 방 10개, 방마다 메시지 250개)를 자동으로 만들어둡니다 — 회원가입 API가 따로 없어서, 이 계정 없이는 갓 받은 DB로 로그인할 방법이 없습니다.
 
-| 이메일 | 비밀번호 |
-|---|---|
-| `test@chulgunhaza.com` | `test1234!` |
+| 이메일 | 비밀번호 | 비고 |
+|---|---|---|
+| `test@chulgunhaza.com` | `test1234!` | 기본 테스트 계정 |
+| `seed-colleague-01@chulgunhaza.com` | `test1234!` | 동료 10명 중 1명(박서준) — 브라우저 2개로 각각 로그인하면 1:1 채팅을 실제로 주고받아볼 수 있습니다 |
 
 운영 배포 시에는 `app.seed-demo-account=false`로 이 초기화 로직을 꺼둡니다.
 
