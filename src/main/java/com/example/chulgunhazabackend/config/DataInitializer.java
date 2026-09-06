@@ -44,6 +44,12 @@ public class DataInitializer implements CommandLineRunner {
     public static final String SEED_EMAIL = "test@chulgunhaza.com";
     public static final String SEED_PASSWORD = "test1234!";
 
+    // 관리자 페이지 작업(#83) 때문에 추가 — UserRole에 MANAGER/ADMIN이 이미 정의돼
+    // 있었는데도 시드 계정이 전부 USER뿐이라 관리자 권한(@PreAuthorize("hasAnyRole('ROLE_MANAGER')")
+    // 붙은 사원 생성/수정/삭제 등)을 로컬에서 테스트할 방법이 아예 없었다.
+    public static final String SEED_MANAGER_EMAIL = "manager@chulgunhaza.com";
+    public static final String SEED_MANAGER_PASSWORD = "test1234!";
+
     private static final int ROOM_COUNT = 10;
     private static final int MESSAGES_PER_ROOM = 250;
 
@@ -74,6 +80,8 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) {
         Employee seedEmployee = employeeRepository.findEmployeeByEmail(SEED_EMAIL)
                 .orElseGet(this::createSeedEmployee);
+        employeeRepository.findEmployeeByEmail(SEED_MANAGER_EMAIL)
+                .orElseGet(this::createSeedManager);
 
         seedChatData(seedEmployee.getId());
     }
@@ -96,6 +104,27 @@ public class DataInitializer implements CommandLineRunner {
         Employee saved = employeeRepository.save(employee);
         log.info("시드 계정 생성됨 — email: {}, password: {} (로컬 개발 전용, app.seed-demo-account=false로 끌 수 있음)",
                 SEED_EMAIL, SEED_PASSWORD);
+        return saved;
+    }
+
+    private Employee createSeedManager() {
+        Employee manager = Employee.builder()
+                .name("김관리")
+                .email(SEED_MANAGER_EMAIL)
+                .gender(Gender.FEMALE)
+                .birthdate(LocalDate.of(1988, 1, 1))
+                .hireDate(LocalDate.now().minusYears(5))
+                .department("태동팀")
+                .position(Position.TEAM_LEADER)
+                .userRoleList(List.of(UserRole.USER, UserRole.MANAGER))
+                .employeeImage(new EmployeeImage())
+                .annual(new Annual())
+                .build();
+        manager.updatePassword(passwordEncoder, SEED_MANAGER_PASSWORD);
+
+        Employee saved = employeeRepository.save(manager);
+        log.info("관리자 시드 계정 생성됨 — email: {}, password: {} (로컬 개발 전용)",
+                SEED_MANAGER_EMAIL, SEED_MANAGER_PASSWORD);
         return saved;
     }
 

@@ -29,7 +29,11 @@ public class AppCorsConfigurationSource implements CorsConfigurationSource {
         CorsConfiguration corsConfiguration = new CorsConfiguration();
         corsConfiguration.setAllowedOriginPatterns(allowedOrigins);
         corsConfiguration.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type"));
-        corsConfiguration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"));
+        // PATCH가 빠져있어서 @PatchMapping을 쓰는 엔드포인트(사원 삭제, 게시글 삭제)가
+        // 전부 프리플라이트(OPTIONS) 단계에서 403으로 막히고 있었다 — curl로는 프리플라이트
+        // 자체가 없어서 지금까지 발견이 안 됐다가, 실제 브라우저에서 관리자 페이지 삭제
+        // 버튼을 눌러보다가 발견했다.
+        corsConfiguration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"));
         corsConfiguration.setAllowCredentials(true); // 헤더/쿠키 허용
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
