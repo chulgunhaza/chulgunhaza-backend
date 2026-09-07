@@ -108,7 +108,6 @@ npm run dev   # http://localhost:3000
 ![Spring Batch](https://img.shields.io/badge/Spring%20Batch-4.x-0062A1)
 ![Redis](https://img.shields.io/badge/Redis-6.x-DC382D)
 ![Docker](https://img.shields.io/badge/Docker-20.x-blue)
-![Nginx](https://img.shields.io/badge/Nginx-1.x-lightgray)
 ![Git](https://img.shields.io/badge/Git-2.x-F05032)
 ![Swagger](https://img.shields.io/badge/Swagger-API%20Docs-brightgreen)
 ![AWS EC2](https://img.shields.io/badge/AWS%20EC2-lightgrey)
