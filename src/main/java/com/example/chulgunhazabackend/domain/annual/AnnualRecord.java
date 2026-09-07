@@ -56,4 +56,12 @@ public class AnnualRecord extends BaseEntity {
         this.annualApprovalStatus = annualApprovalStatus;
     }
 
+    public boolean isRejected() {
+        return this.annualApprovalStatus == AnnualApprovalStatus.REJECTED;
+    }
+
+    public void reject() {
+        this.annualApprovalStatus = AnnualApprovalStatus.REJECTED;
+    }
+
 }
