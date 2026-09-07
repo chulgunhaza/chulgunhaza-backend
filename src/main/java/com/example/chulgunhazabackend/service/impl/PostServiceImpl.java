@@ -64,8 +64,14 @@ public class PostServiceImpl implements PostService {
 
     @Transactional(readOnly = true)
     public PageDto<PostListResponseDto> findAllByDelFlagFalseAndCategory(Pageable pageable, String category){
-        Page<PostListResponseDto> contents = postRepository.findAllByDelFlagFalseAndCategory(pageable, new Category(category)).map(post -> new PostListResponseDto().fromEntity(post));
+        Page<PostListResponseDto> contents = postRepository.findAllByDelFlagFalseAndCategoryOrderByPinnedDescCreatedAtDesc(pageable, new Category(category)).map(post -> new PostListResponseDto().fromEntity(post));
         return new PageDto<PostListResponseDto>(contents);
+    }
+
+    public boolean togglePin(Long postNumber) throws MalformedURLException {
+        Post post = validAfterGetPost(postNumber);
+        post.togglePinned();
+        return postRepository.save(post).isPinned();
     }
 
     private Post validAfterGetPost(Long postNumber){

@@ -15,4 +15,7 @@ public interface PostService {
     Long deleteById(Long postNumber) throws MalformedURLException;
     Long modifyById(Long postNumber, PostModifyRequestDto dto, List<MultipartFile> postFiles) throws IOException;
     PageDto<PostListResponseDto> findAllByDelFlagFalseAndCategory(Pageable pageable, String category);
+
+    // 관리자 백로그 Epic 5 — 공지 고정 토글. 반환값은 토글 후 상태.
+    boolean togglePin(Long postNumber) throws MalformedURLException;
 }

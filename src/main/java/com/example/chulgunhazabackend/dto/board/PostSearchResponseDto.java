@@ -18,6 +18,7 @@ public class PostSearchResponseDto {
     private List<String> imageList;
     private int count;
     private Category category;
+    private boolean pinned; // 관리자 백로그 Epic 5 — 공지 고정
 
     public PostSearchResponseDto fromEntity(Post post, List<String> imageList){
         return new PostSearchResponseDto(
@@ -27,6 +28,7 @@ public class PostSearchResponseDto {
                 ,imageList
                 ,post.getCount()
                 ,post.getCategory()
+                ,post.isPinned()
         );
     }
 

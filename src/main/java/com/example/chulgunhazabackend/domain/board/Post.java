@@ -46,6 +46,11 @@ public class Post extends BaseEntity {
     @ColumnDefault("0")
     private int count;
 
+    // 관리자 백로그 Epic 5 — 공지 고정. 목록 조회 시 이 값 기준으로 먼저 정렬해서
+    // 고정된 글이 항상 위에 오게 한다(PostRepository 참고).
+    @ColumnDefault("false")
+    private boolean pinned;
+
     public Post(String title, String content, Category category, List<PostFile> postFilesList, Employee employee) {
         this.title = title;
         this.content = content;
@@ -59,6 +64,10 @@ public class Post extends BaseEntity {
         this.content = content;
         this.category = category;
         this.postFilesList = postFilesList;
+    }
+
+    public void togglePinned() {
+        this.pinned = !this.pinned;
     }
 
 }

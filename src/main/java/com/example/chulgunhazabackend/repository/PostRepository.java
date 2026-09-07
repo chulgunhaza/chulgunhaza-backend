@@ -14,6 +14,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     @EntityGraph(attributePaths = "postFilesList")
     Optional<Post> findByIdAndDelFlagFalse(Long postId);
 
-    Page<Post> findAllByDelFlagFalseAndCategory(Pageable pageable, Category category);
+    // 고정된 글이 항상 위에 오도록 pinned desc를 우선 정렬 기준으로 둔다(#Epic 5).
+    Page<Post> findAllByDelFlagFalseAndCategoryOrderByPinnedDescCreatedAtDesc(Pageable pageable, Category category);
 
 }
