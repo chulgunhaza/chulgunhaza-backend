@@ -17,4 +17,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     // 고정된 글이 항상 위에 오도록 pinned desc를 우선 정렬 기준으로 둔다(#Epic 5).
     Page<Post> findAllByDelFlagFalseAndCategoryOrderByPinnedDescCreatedAtDesc(Pageable pageable, Category category);
 
+    // 관리자 백로그 Epic 6 — 대시보드 통계 카드용.
+    long countByDelFlagFalse();
+
 }

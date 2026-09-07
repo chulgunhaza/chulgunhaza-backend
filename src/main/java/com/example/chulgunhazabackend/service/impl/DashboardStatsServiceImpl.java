@@ -1,0 +1,48 @@
+package com.example.chulgunhazabackend.service.impl;
+
+import com.example.chulgunhazabackend.dto.dashboard.DashboardStatsResponseDto;
+import com.example.chulgunhazabackend.repository.AttendanceRecordRepository;
+import com.example.chulgunhazabackend.repository.EmployeeRepository;
+import com.example.chulgunhazabackend.repository.PostRepository;
+import com.example.chulgunhazabackend.service.DashboardStatsService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class DashboardStatsServiceImpl implements DashboardStatsService {
+
+    private final EmployeeRepository employeeRepository;
+    private final AttendanceRecordRepository attendanceRecordRepository;
+    private final PostRepository postRepository;
+
+    @Override
+    public DashboardStatsResponseDto getStats() {
+        long totalEmployees = employeeRepository.countByDelFlagFalse();
+
+        // 부서명 오름차순으로 안정적인 순서를 유지 — 매번 순서가 바뀌면 카드 UI가 깜빡여 보인다.
+        Map<String, Long> departmentCounts = employeeRepository.countActiveEmployeesByDepartment().stream()
+                .collect(Collectors.toMap(
+                        row -> (String) row[0],
+                        row -> (Long) row[1],
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        LocalDateTime todayEnd = todayStart.plusDays(1);
+        long todayAttendanceCount = attendanceRecordRepository.countByCheckInTimeBetween(todayStart, todayEnd);
+
+        long totalPosts = postRepository.countByDelFlagFalse();
+
+        return new DashboardStatsResponseDto(totalEmployees, departmentCounts, todayAttendanceCount, totalPosts);
+    }
+}
