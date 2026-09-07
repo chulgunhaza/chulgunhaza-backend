@@ -67,6 +67,9 @@ dependencies {
 
     // openapi / swagger (#52)
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+
+    // AOP 기반 요청 로깅 (#51)
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
 }
 
 tasks.named('test') {
