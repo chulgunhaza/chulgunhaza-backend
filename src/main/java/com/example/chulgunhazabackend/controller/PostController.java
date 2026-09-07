@@ -35,16 +35,22 @@ public class PostController {
         return ResponseEntity.status(200).body(postService.findById(postNumber));
     }
 
+    // #87: 작성자 본인이거나 근태 관리자(MANAGER/ADMIN)일 때만 삭제 가능.
     @PatchMapping("/delete/{postNumber}")
-    public ResponseEntity<Long> deleteById(@PathVariable Long postNumber) throws IOException {
-        return ResponseEntity.status(204).body(postService.deleteById(postNumber));
+    public ResponseEntity<Long> deleteById(@PathVariable Long postNumber,
+                                           @AuthenticationPrincipal EmployeeCredentialDto employeeCredentialDto) throws IOException {
+        boolean isManager = employeeCredentialDto.getRoles().stream().anyMatch(r -> r.equals("MANAGER") || r.equals("ADMIN"));
+        return ResponseEntity.status(204).body(postService.deleteById(postNumber, employeeCredentialDto.getId(), isManager));
     }
 
+    // #87: 작성자 본인이거나 근태 관리자(MANAGER/ADMIN)일 때만 수정 가능.
     @PutMapping("/modify/{postNumber}")
     public ResponseEntity<Long> modifyById(@PathVariable Long postNumber,
                                            @Valid @RequestPart PostModifyRequestDto dto,
-                                           @RequestParam("list") List<MultipartFile> list) throws IOException {
-        return ResponseEntity.status(200).body(postService.modifyById(postNumber, dto, list));
+                                           @RequestParam("list") List<MultipartFile> list,
+                                           @AuthenticationPrincipal EmployeeCredentialDto employeeCredentialDto) throws IOException {
+        boolean isManager = employeeCredentialDto.getRoles().stream().anyMatch(r -> r.equals("MANAGER") || r.equals("ADMIN"));
+        return ResponseEntity.status(200).body(postService.modifyById(postNumber, dto, list, employeeCredentialDto.getId(), isManager));
     }
 
     @GetMapping("")

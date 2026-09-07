@@ -49,17 +49,33 @@ public class PostServiceImpl implements PostService {
         return new PostSearchResponseDto().fromEntity(post, fileService.findPostFiles(post.getPostFilesList()));
     }
 
-    public Long deleteById(Long postNumber) throws MalformedURLException {
+    public Long deleteById(Long postNumber, Long executor, boolean isManager) throws MalformedURLException {
         Post post = validAfterGetPost(postNumber);
+        assertCanModify(post, executor, isManager);
         post.delete();
         return postRepository.save(post).getId();
     }
 
     @Transactional(rollbackFor = IOException.class)
-    public Long modifyById(Long postNumber, PostModifyRequestDto dto, List<MultipartFile> postFiles) throws IOException {
+    public Long modifyById(Long postNumber, PostModifyRequestDto dto, List<MultipartFile> postFiles, Long executor, boolean isManager) throws IOException {
         Post post = validAfterGetPost(postNumber);
+        assertCanModify(post, executor, isManager);
         post.updatePost(dto.getTitle(), dto.getContent(), new Category(dto.getCategoryName()), fileService.savePostFiles(postFiles));
         return postRepository.save(post).getId();
+    }
+
+    // #87: 원래는 삭제/수정에 작성자 검증이 아예 없어서 로그인만 돼 있으면 남의 글도
+    // 지울 수 있었다. 관리자(MANAGER/ADMIN)는 예외적으로 허용 — Epic 5의 "관리자
+    // 전용 강제 삭제" 요구사항과 맞물린다. employee가 없는 마이그레이션 이전 글은
+    // 작성자를 특정할 수 없어 관리자만 처리 가능하다.
+    private void assertCanModify(Post post, Long executor, boolean isManager) {
+        if (isManager) {
+            return;
+        }
+        boolean isAuthor = post.getEmployee() != null && post.getEmployee().getId().equals(executor);
+        if (!isAuthor) {
+            throw new PostException(PostExceptionType.NOT_POST_AUTHOR);
+        }
     }
 
     @Transactional(readOnly = true)
