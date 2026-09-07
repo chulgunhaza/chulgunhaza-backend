@@ -12,8 +12,9 @@ import java.util.List;
 public interface PostService {
     Long create(PostCreateRequestDto dto, List<MultipartFile> postFiles, Long executor) throws IOException;
     PostSearchResponseDto findById(Long postNumber) throws MalformedURLException;
-    Long deleteById(Long postNumber) throws MalformedURLException;
-    Long modifyById(Long postNumber, PostModifyRequestDto dto, List<MultipartFile> postFiles) throws IOException;
+    // #87: 작성자 본인이거나 isManager(관리자 강제 삭제/수정)일 때만 허용.
+    Long deleteById(Long postNumber, Long executor, boolean isManager) throws MalformedURLException;
+    Long modifyById(Long postNumber, PostModifyRequestDto dto, List<MultipartFile> postFiles, Long executor, boolean isManager) throws IOException;
     PageDto<PostListResponseDto> findAllByDelFlagFalseAndCategory(Pageable pageable, String category);
 
     // 관리자 백로그 Epic 5 — 공지 고정 토글. 반환값은 토글 후 상태.
