@@ -5,6 +5,7 @@ import com.example.chulgunhazabackend.domain.annual.AnnualApprovalStatus;
 import com.example.chulgunhazabackend.domain.annual.AnnualRecord;
 import com.example.chulgunhazabackend.domain.member.Employee;
 import com.example.chulgunhazabackend.dto.PageDto;
+import com.example.chulgunhazabackend.dto.annual.AnnualHistoryResponseDto;
 import com.example.chulgunhazabackend.dto.annual.AnnualRecordListResponseDto;
 import com.example.chulgunhazabackend.dto.annual.AnnualUsageRequestDto;
 import com.example.chulgunhazabackend.dto.annual.AnnualUsageResponseDto;
@@ -118,5 +119,14 @@ public class AnnualLeaveServiceImpl implements AnnualLeaveService {
         annualRecordRepository.save(record);
 
         Events.raise(new AnnualUseEvent(employee.getEmployeeNo(), refunded.getRemainingAnnualCount()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageDto<AnnualHistoryResponseDto> getMyAnnualHistory(Long employeeId, Pageable pageable) {
+        Page<AnnualHistoryResponseDto> contents = annualRecordRepository
+                .findByEmployeeIdOrderByAnnualDateDesc(employeeId, pageable)
+                .map(AnnualHistoryResponseDto::fromEntity);
+        return new PageDto<>(contents);
     }
 }
