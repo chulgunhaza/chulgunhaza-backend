@@ -40,3 +40,6 @@ out/
 .env
 gradle.properties
 uploads/
+
+### 로그 파일 (#51 — logback-spring.xml이 여기로 롤링 저장) ###
+logs/
