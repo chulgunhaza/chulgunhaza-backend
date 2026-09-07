@@ -4,10 +4,14 @@ import com.example.chulgunhazabackend.domain.annual.Annual;
 import com.example.chulgunhazabackend.domain.annual.AnnualApprovalStatus;
 import com.example.chulgunhazabackend.domain.annual.AnnualRecord;
 import com.example.chulgunhazabackend.domain.member.Employee;
+import com.example.chulgunhazabackend.dto.PageDto;
+import com.example.chulgunhazabackend.dto.annual.AnnualRecordListResponseDto;
 import com.example.chulgunhazabackend.dto.annual.AnnualUsageRequestDto;
 import com.example.chulgunhazabackend.dto.annual.AnnualUsageResponseDto;
 import com.example.chulgunhazabackend.event.annual.event.AnnualUseEvent;
 import com.example.chulgunhazabackend.event.common.Events;
+import com.example.chulgunhazabackend.exception.annualException.AnnualException;
+import com.example.chulgunhazabackend.exception.annualException.AnnualExceptionType;
 import com.example.chulgunhazabackend.exception.employeeException.EmployeeException;
 import com.example.chulgunhazabackend.exception.employeeException.EmployeeExceptionType;
 import com.example.chulgunhazabackend.repository.AnnualRecordRepository;
@@ -15,8 +19,14 @@ import com.example.chulgunhazabackend.repository.EmployeeRepository;
 import com.example.chulgunhazabackend.service.AnnualLeaveService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * #48 연차 사용 동시성 제어.
@@ -66,5 +76,47 @@ public class AnnualLeaveServiceImpl implements AnnualLeaveService {
 
         return AnnualUsageResponseDto.of(saved, usedAnnual.getTotalAnnualCount(),
                 usedAnnual.getUseCount(), usedAnnual.getRemainingAnnualCount());
+    }
+
+    @Override
+    public PageDto<AnnualRecordListResponseDto> getAllAnnualRecords(Pageable pageable) {
+        Page<AnnualRecord> records = annualRecordRepository.findAllByOrderByCreatedAtDesc(pageable);
+
+        // AnnualRecord는 채팅/근태 기록과 같은 이유로 employeeId만 갖고 있어서(애그리게이트
+        // 경계), N+1 없이 이름을 채우려면 이 페이지에 등장하는 사원들을 한 번에 배치 조회한다.
+        List<Long> employeeIds = records.getContent().stream()
+                .map(AnnualRecord::getEmployeeId)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, String> nameById = employeeRepository.findAllById(employeeIds).stream()
+                .collect(Collectors.toMap(Employee::getId, Employee::getName));
+
+        Page<AnnualRecordListResponseDto> contents = records
+                .map(record -> AnnualRecordListResponseDto.fromEntity(record, nameById.get(record.getEmployeeId())));
+        return new PageDto<>(contents);
+    }
+
+    @Override
+    public void rejectAnnualRecord(Long annualRecordId) {
+        AnnualRecord record = annualRecordRepository.findById(annualRecordId)
+                .orElseThrow(() -> new AnnualException(AnnualExceptionType.ANNUAL_RECORD_NOT_FOUND));
+
+        if (record.isRejected()) {
+            throw new AnnualException(AnnualExceptionType.ALREADY_REJECTED);
+        }
+
+        // useAnnualLeave와 동일하게 비관적 락 위에서 환급해야 동시 반려/재사용 요청과
+        // 경쟁해도 잔여 연차가 어긋나지 않는다.
+        Employee employee = employeeRepository.findEmployeeByIdForUpdate(record.getEmployeeId())
+                .orElseThrow(() -> new EmployeeException(EmployeeExceptionType.NOT_EXIST_USER));
+
+        Annual refunded = employee.getAnnual().refund(record.getAnnualType().getDayCost());
+        employee.updateAnnual(refunded);
+        employeeRepository.saveAndFlush(employee);
+
+        record.reject();
+        annualRecordRepository.save(record);
+
+        Events.raise(new AnnualUseEvent(employee.getEmployeeNo(), refunded.getRemainingAnnualCount()));
     }
 }

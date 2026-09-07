@@ -57,4 +57,18 @@ public class Annual {
                 .sickAnnualCount(this.sickAnnualCount)
                 .build();
     }
+
+    /**
+     * 관리자가 이미 사용 처리된 연차를 반려(#Epic 4)했을 때, {@code use}의 반대로
+     * {@code days}만큼 되돌린 새 {@link Annual} 값을 반환한다. use()와 마찬가지로
+     * 원자적 반영은 호출하는 서비스 계층이 비관적 락 위에서 해야 한다.
+     */
+    public Annual refund(double days) {
+        return Annual.builder()
+                .totalAnnualCount(this.totalAnnualCount)
+                .useCount(Math.max(0, this.useCount - days))
+                .remainingAnnualCount(this.remainingAnnualCount + days)
+                .sickAnnualCount(this.sickAnnualCount)
+                .build();
+    }
 }
