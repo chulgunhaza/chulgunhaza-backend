@@ -49,9 +49,12 @@ public class ChatMessageListener {
             // 루프에 빠진다 — 실측으로 로그 파일이 몇 초 만에 7900만 줄까지 불어나는 것으로
             // 확인(#72에서 원인이 된 데이터 버그 자체는 고쳤지만, "예상 못 한 예외가 나면
             // 무한 재시도"라는 이 리스너의 구조적 위험은 남아 있어서 별도로 방어한다).
-            // 큐 자체에 데드레터가 없어서(다른 큐들과 달리) 일단 드롭 + 에러 로그로 가시성은
-            // 남긴다 — 데드레터 큐 추가는 후속 이슈로 분리.
-            log.error("unexpected error while saving chat message via RabbitMQ, dropping message: {}", e.getMessage(), e);
+            // chatQueue에 x-dead-letter-exchange를 걸어둬서(#73, RabbitMQConfig 참고)
+            // 아래 basicNack(requeue=false)이 큐에서 그냥 드롭하는 게 아니라
+            // chatDeadLetterQueue로 자동 라우팅된다 — ChatDeadLetterListener가
+            // @Retryable(3회)로 재처리를 시도하고, 그래도 실패하면 @Recover에서
+            // 에러 로그로 가시성을 남긴다.
+            log.error("unexpected error while saving chat message via RabbitMQ, routing to DLQ: {}", e.getMessage(), e);
             channel.basicNack(tag, false, false);
         }
     }

@@ -48,12 +48,19 @@ public class RabbitMQConfig {
     // Dead - Letter
     public static final String DLX = "deadLetterExchange";
     public static final String A_DLQ = "attendanceDeadLetterQueue";
+    // #73: 채팅 큐엔 데드레터가 없어서 처리 실패한 메시지가 그냥 드롭되고 나중에
+    // 다시 조사할 방법이 없었다(ChatMessageListener 참고). attendanceQueue와 같은
+    // 패턴으로 데드레터 큐를 추가한다.
+    public static final String C_DLQ = "chatDeadLetterQueue";
 
 
 
     @Bean
     public Queue chatQueue() {
-        return new Queue(CHAT_QUEUE_NAME,true);
+        return QueueBuilder.durable(CHAT_QUEUE_NAME)
+                .withArgument("x-dead-letter-exchange", DLX)
+                .withArgument("x-dead-letter-routing-key", C_DLQ)
+                .build();
     }
 
     @Bean
@@ -82,6 +89,11 @@ public class RabbitMQConfig {
     @Bean
     public Queue attendanceDeadLetterQueue(){
         return QueueBuilder.durable(A_DLQ).build();
+    }
+
+    @Bean
+    public Queue chatDeadLetterQueue(){
+        return QueueBuilder.durable(C_DLQ).build();
     }
 
     @Bean
@@ -126,6 +138,11 @@ public class RabbitMQConfig {
     @Bean
     public Binding attendanceDeadLetterBinding() {
         return BindingBuilder.bind(attendanceDeadLetterQueue()).to(deadLetterExchange()).with(A_DLQ);
+    }
+
+    @Bean
+    public Binding chatDeadLetterBinding() {
+        return BindingBuilder.bind(chatDeadLetterQueue()).to(deadLetterExchange()).with(C_DLQ);
     }
 
     // 메시지 송신 빈 등록
