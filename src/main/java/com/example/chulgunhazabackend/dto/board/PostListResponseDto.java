@@ -18,6 +18,7 @@ public class PostListResponseDto {
     private String author; // #59: Post-Employee 연동 후 작성자 이름 노출
     private int count;
     private LocalDateTime createdAt;
+    private boolean pinned; // 관리자 백로그 Epic 5 — 공지 고정
 
 
     public PostListResponseDto fromEntity(Post post){
@@ -27,6 +28,7 @@ public class PostListResponseDto {
                 ,post.getEmployee() != null ? post.getEmployee().getName() : null // 마이그레이션 이전 게시글 대비
                 ,post.getCount()
                 ,post.getCreatedAt()
+                ,post.isPinned()
         );
     }
 }
