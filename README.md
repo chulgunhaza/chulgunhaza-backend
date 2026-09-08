@@ -77,10 +77,10 @@ npm run dev   # http://localhost:3000
 - **권한 관리** - Admin, 근태 담당자, 사원 분리
 - **파일 업로드** - MultiPartFile 사용(게시글 첨부, 사원 프로필 이미지). S3 마이그레이션은 아직 미착수(로컬 디스크 저장)
 - **트래픽 처리** - RabbitMQ를 통한 출근 등록/채팅 저장 비동기 처리, DLQ + 재시도(`@Retryable`)
-- **로그인** - 세션 로그인(Redis 세션 스토어)
+- **로그인** - JWT(RS256, httpOnly 쿠키) 기반 access/refresh 토큰 인증 — [#98](https://github.com/chulgunhaza/chulgunhaza-backend/issues/98)에서 세션(Redis) 방식을 대체. 자세한 설계는 [docs/jwt-authentication.md](docs/jwt-authentication.md) 참고
 - **소프트 딜리트** - `delFlag` 필드를 통한 소프트 딜리트
 - **CORS 화이트리스트** - 설정 기반 origin 화이트리스트(`cors.allowed-origins`)
-- **API 문서화** - Swagger/OpenAPI(springdoc), 세션 쿠키 인증에 맞춰 커스텀 스킴 등록
+- **API 문서화** - Swagger/OpenAPI(springdoc), JWT 쿠키(`access_token`) 인증에 맞춰 커스텀 스킴 등록
 - **CI** - GitHub Actions로 PR/push 시 테스트 자동 실행
 
 ### 아직 구현되지 않은 것 (README 목표 대비)
@@ -90,7 +90,7 @@ npm run dev   # http://localhost:3000
 - AOP 기반 로그 추적 + 로그 파일 스케줄러
 - 파일 업로드 S3 마이그레이션
 - HTTPS 적용
-- 레플리카(Redis/DB 다운 시 자동 복구) — 세션은 Redis에 위임돼 있어 WAS 다중화의 기반은 마련돼 있으나, 실제 장애 복구 구성은 아직 없음
+- 레플리카(Redis/DB 다운 시 자동 복구) — access 토큰 검증은 JWT 서명만으로 되므로 Redis 없이도 계속 되지만(#98), refresh 토큰 재발급/로그아웃 무효화는 여전히 Redis에 의존한다. 실제 장애 복구 구성은 아직 없음
 
 ## 테스트
 단위 테스트 + 실제 DB가 붙는 통합 테스트를 합쳐 12개 테스트 클래스가 있습니다(`AnnualLeaveServiceImplConcurrencyTest`, `AppCorsConfigurationSourceTest`, `AttendanceAlarmServiceImplTest`, `ChatMessageListenerTest`, `ChatMessageServiceImplTest`, `ChatRoomServiceImplTest`, `ChatRoomServiceImplQueryCountTest` 등). 특히:
@@ -120,8 +120,8 @@ graph TB
     Browser["Browser / Client"]
 
     subgraph App["Spring Boot App (chulgunhaza-backend)"]
-        Security["Spring Security<br/>Session 인증 (BCrypt, DaoAuthenticationProvider)"]
-        Controllers["Controllers<br/>Employee / Attendance / Chat / Post / Notification"]
+        JwtFilter["JwtAuthenticationFilter<br/>access_token 쿠키 검증 (RS256)"]
+        Controllers["Controllers<br/>Employee / Auth / Attendance / Chat / Post / Notification"]
         Services["Services / ServiceImpl"]
         Events["ApplicationEvent<br/>Employee/Attendance/Chat EventHandler"]
         WS["WebSocketMessageHandler<br/>/websocket"]
@@ -130,20 +130,20 @@ graph TB
     end
 
     MySQL[("MySQL<br/>(외부, DATABASE_URL)")]
-    Redis[("Redis<br/>Session Store")]
+    Redis[("Redis<br/>Refresh 토큰 jti 저장")]
     RabbitMQ{{"RabbitMQ<br/>chat / main Exchange"}}
     DLQ["attendanceDeadLetterQueue<br/>(Spring Retry 3회)"]
 
-    Browser -->|"HTTP + JSESSIONID 쿠키"| Security
-    Browser -->|"WebSocket"| WS
+    Browser -->|"HTTP + access_token/refresh_token 쿠키(httpOnly)"| JwtFilter
+    Browser -->|"WebSocket (쿠키 자동 첨부)"| WS
     Browser -->|"SSE 구독"| SSE
 
-    Security --> Controllers --> Services
+    JwtFilter --> Controllers --> Services
     Services --> Repos --> MySQL
     Services --> Events
     Services -->|"convertAndSend"| RabbitMQ
     RabbitMQ -->|"@RabbitListener"| Services
-    Security <-->|"세션 저장/조회"| Redis
+    JwtFilter <-->|"refresh 시 jti 대조/회전"| Redis
     Services -->|"emitter.send"| SSE
     Services -->|"session.sendMessage"| WS
     RabbitMQ -->|"처리 실패 시 DLX 라우팅"| DLQ
@@ -152,9 +152,9 @@ graph TB
 
 ### 계층 구조
 - **Controller** → **Service(Impl)** → **Repository(JPA)** → **MySQL** 로 이어지는 전형적인 계층형 구조이며, 도메인은 `member`, `attendance`, `annual`, `leaveWork`, `board`, `chat` 로 분리되어 있습니다.
-- 인증/인가는 `SecurityConfig` 에서 세션 기반(`SessionCreationPolicy.NEVER`, 세션 자체는 필요 시에만 생성)으로 구성되고, 세션 저장소는 `spring-session-data-redis` 로 Redis에 위임합니다(`RedisConfig`, `SessionConfig`). 이를 통해 WAS(애플리케이션 서버)가 여러 대여도 세션을 공유할 수 있고, README에 언급된 "레플리카" 목표(Redis/DB 다운 시 복구)의 기반이 됩니다.
+- 인증/인가는 `SecurityConfig` 에서 JWT(RS256) 기반(`SessionCreationPolicy.NEVER`, HttpSession 자체를 아예 안 씀)으로 구성됩니다. `JwtAuthenticationFilter`가 매 요청마다 `access_token` 쿠키의 서명·만료만 검증하므로 WAS(애플리케이션 서버)를 여러 대로 늘려도 별도 세션 공유가 필요 없습니다. Redis는 이제 refresh 토큰의 jti만 저장하는 데 씁니다(`RefreshTokenStore`) — 자세한 설계와 전환 배경은 [docs/jwt-authentication.md](docs/jwt-authentication.md) 참고.
 - 도메인 간 부수 효과(알림 발송 등)는 RabbitMQ를 직접 호출하는 대신 **Spring `ApplicationEvent`** (`event/attendance`, `event/chat`, `event/employee`)로 한 번 더 분리되어 있어, 이벤트 발행부와 처리부가 느슨하게 결합되어 있습니다.
-- `Chat` 도메인은 `Employee`를 `@ManyToOne` 객체 참조가 아니라 `Long employeeId` 값으로만 참조합니다 — 서로 다른 애그리게이트가 객체 그래프로 직접 결합돼 있으면 한쪽 데이터 정합성 문제가 다른 도메인 쿼리까지 깨뜨릴 수 있다는 걸 실제 인시던트로 겪은 뒤([#72](https://github.com/chulgunhaza/chulgunhaza-backend/pull/72)) 정리했고, 장기적으로는 Chat을 별도 서비스로 분리하는 것까지 염두에 두고 있습니다([#74](https://github.com/chulgunhaza/chulgunhaza-backend/issues/74)).
+- `Chat`/`Attendance`/`AnnualRecord` 도메인은 `Employee`를 `@ManyToOne` 객체 참조가 아니라 `Long employeeId` 값으로만 참조합니다 — 서로 다른 애그리게이트가 객체 그래프로 직접 결합돼 있으면 한쪽 데이터 정합성 문제가 다른 도메인 쿼리까지 깨뜨릴 수 있다는 걸 실제 인시던트로 겪은 뒤([#72](https://github.com/chulgunhaza/chulgunhaza-backend/pull/72)) 정리했고, 장기적으로는 이 도메인들을 별도 서비스로 분리하는 것까지 염두에 두고 있습니다([#74](https://github.com/chulgunhaza/chulgunhaza-backend/issues/74)). `Post`는 아직 이 규칙을 못 지키고 있는 예외인데, 애그리거트 판단 기준과 서비스별 매핑 전체는 [docs/aggregate-boundaries.md](docs/aggregate-boundaries.md)에 정리했습니다.
 
 ### 메시징(RabbitMQ) 토폴로지
 - `chulgunhazabackend_main` Exchange(Direct) → `attendance_queue`(출근 등록), `leave_work_queue`(연차), `main_notification_queue`(근태 알림)
@@ -203,24 +203,26 @@ graph TB
 - CORS 화이트리스트 적용, 연차 사용 동시성 제어, 근태(MAIN) SSE 알림, Swagger/OpenAPI 문서화, 사원 프로필 이미지 업로드, Post–User 연동 정리 — 초기 로드맵의 Phase 0~2 항목 전부
 - 그룹 채팅 + 채팅방 나가기, 채팅 읽음/안읽음 참여자별 추적, 채팅 애그리게이트 경계 정리(Employee를 id로만 참조), 채팅 실시간 전달을 DB 저장 성공 이후로 이동
 - GitHub Actions CI(테스트 자동 실행), 쿼리 카운트 기반 성능 회귀 테스트
+- 관리자 페이지(사원/근태/연차 결재/대시보드 통계), 게시글 고정 + 작성자 권한 검사, 연차 사용 이력 조회([#79](https://github.com/chulgunhaza/chulgunhaza-backend/issues/79)), 채팅 큐 데드레터([#73](https://github.com/chulgunhaza/chulgunhaza-backend/issues/73)), AttendanceListener DLQ ack 누락 수정([#76](https://github.com/chulgunhaza/chulgunhaza-backend/issues/76)), AOP 요청 로깅 + 로그 파일 롤링([#51](https://github.com/chulgunhaza/chulgunhaza-backend/issues/51)), 로그인 직후 세션 레이스 컨디션 원인 규명·수정([#65](https://github.com/chulgunhaza/chulgunhaza-backend/issues/65))
+- **세션(Redis) → JWT(RS256) 인증 전환**([#98](https://github.com/chulgunhaza/chulgunhaza-backend/issues/98)) — [docs/jwt-authentication.md](docs/jwt-authentication.md), 애그리거트 경계 기준 정리 — [docs/aggregate-boundaries.md](docs/aggregate-boundaries.md)
 
 ### 🚧 남은 작업 (GitHub Issues로 트래킹 중)
 | 이슈 | 내용 |
 |---|---|
-| [#79](https://github.com/chulgunhaza/chulgunhaza-backend/issues/79) | 연차 사용 이력 조회 API + 프론트 캘린더 서버 동기화 |
-| [#76](https://github.com/chulgunhaza/chulgunhaza-backend/issues/76) | AttendanceListener가 DLQ 이동 후 원본 메시지 ack/nack 안 함 |
-| [#74](https://github.com/chulgunhaza/chulgunhaza-backend/issues/74), [#75](https://github.com/chulgunhaza/chulgunhaza-backend/issues/75) | Chat↔Employee MSA 전환 준비 (아키텍처 문서 포함) |
-| [#73](https://github.com/chulgunhaza/chulgunhaza-backend/issues/73), [#65](https://github.com/chulgunhaza/chulgunhaza-backend/issues/65) | 로그인 직후 Redis 세션 레이스 컨디션, 채팅 큐 데드레터 부재 |
+| [#99](https://github.com/chulgunhaza/chulgunhaza-backend/issues/99) | Gradle 멀티모듈 전환 + MySQL 스키마 분리(user/attendance/chatting) |
+| [#100](https://github.com/chulgunhaza/chulgunhaza-backend/issues/100) | attendance-server 물리 분리 (1차 착수) |
+| [#101](https://github.com/chulgunhaza/chulgunhaza-backend/issues/101) | chatting-server 물리 분리 + Redis Pub/Sub 팬아웃 |
+| [#102](https://github.com/chulgunhaza/chulgunhaza-backend/issues/102) | user-server 정리 + 사원 이벤트(EmployeeCreateEvent 등) 실구현 |
+| [#74](https://github.com/chulgunhaza/chulgunhaza-backend/issues/74), [#75](https://github.com/chulgunhaza/chulgunhaza-backend/issues/75) | 서비스 분리 로드맵 전체 (위 #99~#102의 상위 이슈) |
 | [#63](https://github.com/chulgunhaza/chulgunhaza-backend/issues/63) | 나머지 서비스 계층(Attendance/Post 등) TDD 테스트 확충 |
 | [#60](https://github.com/chulgunhaza/chulgunhaza-backend/issues/60) | HTTPS 적용 |
 | [#53](https://github.com/chulgunhaza/chulgunhaza-backend/issues/53) | 파일 업로드 S3 마이그레이션 |
-| [#51](https://github.com/chulgunhaza/chulgunhaza-backend/issues/51) | AOP 기반 로그 추적 + 로그 파일 스케줄러 |
 | [#50](https://github.com/chulgunhaza/chulgunhaza-backend/issues/50) | 부하 테스트 수행 및 결과 문서화 |
 | [#49](https://github.com/chulgunhaza/chulgunhaza-backend/issues/49) | 데이터베이스 샤딩 검토/적용 |
 | [#47](https://github.com/chulgunhaza/chulgunhaza-backend/issues/47) | Spring Batch 기반 출근 정산 |
 | [#56](https://github.com/chulgunhaza/chulgunhaza-backend/issues/56), [#57](https://github.com/chulgunhaza/chulgunhaza-backend/issues/57) | SseEmitter 타임아웃 조정, RabbitMQ 리스너 배치 처리 설계(읽음 처리) |
 
-우선순위 판단 기준은 대체로 "데이터 정합성/보안 > 관측 가능성 > 배포 인프라 > 스케일 검증" 순 — 예를 들어 부하 테스트(#50)나 DB 샤딩(#49)은 동시성 제어가 끝난 뒤, 모니터링이 갖춰진 뒤에 하는 게 의미가 있어서 뒤로 미뤄뒀습니다.
+우선순위 판단 기준은 대체로 "데이터 정합성/보안 > 관측 가능성 > 배포 인프라 > 스케일 검증" 순 — 예를 들어 부하 테스트(#50)나 DB 샤딩(#49)은 동시성 제어가 끝난 뒤, 모니터링이 갖춰진 뒤에 하는 게 의미가 있어서 뒤로 미뤄뒀습니다. 서비스 분리(#99~#102)는 attendance → chatting → user-server 순으로 진행합니다(결합도가 가장 낮은 것부터).
 
 ## 팀원 
 |임솔|김태동|

@@ -13,8 +13,6 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
-import java.util.stream.Collectors;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -31,17 +29,6 @@ public class UserDetailServiceImpl implements UserDetailsService {
                         new UsernameNotFoundException("NOT_FOUND_EMAIL")
                 );
 
-
-        return new EmployeeCredentialDto(
-                employee.getId(),
-                employee.getEmail(),
-                employee.getPassword(),
-                employee.getName(),
-                employee.getEmployeeNo(),
-                employee.getUserRoleList()
-                        .stream()
-                        .map(userRole -> userRole.name()).collect(Collectors.toList()),
-                employee.getDepartment()
-        );
+        return EmployeeCredentialDto.from(employee);
     }
 }

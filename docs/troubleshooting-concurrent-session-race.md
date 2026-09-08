@@ -277,3 +277,21 @@ run 10 (동시 20개): 실패:0
 
 `application.yml`의 `spring.session.store-type: redis` 자동 구성(비인덱스
 `RedisSessionRepository`)이 그대로 세션을 처리한다.
+
+## 후기 — #98(JWT 전환)으로 이 문제 자체가 원천적으로 사라짐
+
+이 문서가 다루는 레이스 컨디션은 결국 "요청마다 세션 ID를 회전시키는 로직 + Redis
+`hasKey()` 경합"이라는, HttpSession을 인증에 쓰는 구조 자체에서 나오는 문제였다.
+[#98](https://github.com/chulgunhaza/chulgunhaza-backend/issues/98)에서 인증을
+JWT(RS256, httpOnly 쿠키)로 바꾸면서 `SessionCheckFilter`/`LoginSuccessHandler`의
+세션 attribute 로직, `HttpSessionSecurityContextRepository` 저장, `SessionConfig`가
+전부 없어졌다 — 이제 인증은 매 요청마다 access 토큰 서명을 검증하는 것뿐이라, 세션 ID
+회전도, 그걸 저장하려는 동시 쓰기 경합도 애초에 발생하지 않는다.
+
+`spring-session-data-redis` 의존성과 `application.yml`의 `spring.session.store-type`
+설정도 함께 제거했다. Redis는 여전히 쓰지만 용도가 바뀌었다 — 이제 `RefreshTokenStore`가
+refresh 토큰의 jti만 저장해서 로그아웃/재발급 시 무효화하는 데 쓴다(자세한 설계는
+[docs/jwt-authentication.md](jwt-authentication.md) 참고).
+
+이 문서는 과거에 실제로 겪었던 문제와 그 진단 과정을 기록으로 남기기 위해 그대로
+둔다 — 세션 기반 인증으로 되돌아갈 일이 있다면 다시 참고할 수 있게.

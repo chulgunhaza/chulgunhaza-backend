@@ -1,74 +1,61 @@
 package com.example.chulgunhazabackend.security.handler;
 
 import com.example.chulgunhazabackend.dto.Employee.EmployeeCredentialDto;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.chulgunhazabackend.security.jwt.CookieUtil;
+import com.example.chulgunhazabackend.security.jwt.JwtProperties;
+import com.example.chulgunhazabackend.security.jwt.JwtProvider;
+import com.example.chulgunhazabackend.security.jwt.RefreshTokenStore;
 import com.google.gson.Gson;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
-import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
+// #98: 세션 attribute 기반 로그인 처리를 JWT(RS256) 발급으로 교체.
+// access/refresh 토큰을 httpOnly 쿠키로 내려주고, refresh 토큰의 jti만 Redis에
+// 저장해서(값 자체는 저장하지 않음) 로그아웃/재발급 시 회전·무효화할 수 있게 한다.
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class LoginSuccessHandler implements AuthenticationSuccessHandler {
 
-    // INFO : SessionCheckFilter가 매 요청마다 세션의 낱개 attribute(id/email/...)만 읽어서
-    // SecurityContextHolder에 새 Authentication을 꽂아넣다 보니, Spring Security 표준
-    // 저장소(SPRING_SECURITY_CONTEXT 세션 attribute)엔 아무것도 안 남는다. 그래서
-    // SessionManagementFilter가 "저장된 컨텍스트가 없는데 인증된 사용자가 있네" =
-    // "방금 로그인했나 보다"로 매 요청마다 오판해서 세션 ID를 계속 새로 발급했다
-    // (동시 요청 시 hasKey 경합 → "Session was invalidated" 500의 진짜 트리거,
-    // docs/troubleshooting-concurrent-session-race.md 참고). 로그인 시점에 한 번만
-    // 표준 저장소에도 저장해두면, 그 뒤로는 SessionManagementFilter가 "이미 저장된
-    // 컨텍스트 있음"으로 정상 인식해서 더 이상 회전시키지 않는다.
-    private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
+    private final JwtProvider jwtProvider;
+    private final JwtProperties jwtProperties;
+    private final CookieUtil cookieUtil;
+    private final RefreshTokenStore refreshTokenStore;
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
         Gson gson = new Gson();
 
         EmployeeCredentialDto credentialDto = (EmployeeCredentialDto) authentication.getPrincipal();
-        Map<String, Object> claims = credentialDto.getClaims();
 
-        HttpSession httpSession = request.getSession();
+        String accessToken = jwtProvider.issueAccessToken(credentialDto);
+        JwtProvider.IssuedRefreshToken refreshToken = jwtProvider.issueRefreshToken(credentialDto);
 
-        // 세션 정보 생성
-        for (Map.Entry<String, Object> entry : claims.entrySet()) {
-            httpSession.setAttribute(entry.getKey(), entry.getValue());
-        }
+        refreshTokenStore.save(credentialDto.getId(), refreshToken.getJti(), jwtProperties.getRefreshTokenTtlSeconds());
 
-        // 4시간 (초 단위)
-        httpSession.setMaxInactiveInterval(4 * 60 * 60);
-
-        // 표준 저장소에도 한 번만 저장 (위 INFO 참고)
-        securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
+        cookieUtil.addAccessTokenCookie(response, accessToken);
+        cookieUtil.addRefreshTokenCookie(response, refreshToken.getToken());
 
         // 응답 데이터 생성
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("message", "로그인 성공");
         // id(PK)가 빠져있으면 프론트에서 채팅방 생성(senderId 필요) 등을 만들 방법이 없어서 추가함
-        responseData.put("id", claims.get("id"));
-        responseData.put("depart", claims.get("department"));
-        responseData.put("name", claims.get("name"));
-        responseData.put("employeeNo", claims.get("employeeNo"));
-        responseData.put("employeeRoles", claims.get("roles"));
+        responseData.put("id", credentialDto.getId());
+        responseData.put("depart", credentialDto.getDepartment());
+        responseData.put("name", credentialDto.getName());
+        responseData.put("employeeNo", credentialDto.getEmployeeNo());
+        responseData.put("employeeRoles", credentialDto.getRoles());
 
         // JSON 응답 생성
         String jsonStr = gson.toJson(responseData);
