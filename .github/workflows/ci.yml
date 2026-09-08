@@ -15,7 +15,7 @@ jobs:
         image: mysql:8
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: chulgunhaza
+          MYSQL_DATABASE: chulgunhaza_user
           MYSQL_USER: chulgunhaza
           MYSQL_PASSWORD: local1234
         ports:
@@ -49,13 +49,19 @@ jobs:
     env:
       # local dev와 동일한 계약(.env)을 CI 서비스 컨테이너 기준으로 맞춘 값.
       # 전부 CI 안에서만 쓰는 임시 컨테이너용 값이라 민감정보 아님 — repo secrets 불필요.
-      DATABASE_URL: jdbc:mysql://127.0.0.1:3306/chulgunhaza?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
+      DATABASE_URL: jdbc:mysql://127.0.0.1:3306/chulgunhaza_user?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
       DATABASE_USER: chulgunhaza
       DATABASE_PASSWORD: local1234
       SPRING_REDIS_HOST: 127.0.0.1
       SPRING_REDIS_PASS: ""
       UPLOAD_DIR: ./uploads
       CORS_ALLOWED_ORIGINS: http://localhost:3000
+      # #98(JWT): CI 전용 테스트 키페어. 로컬 .env의 키와는 다른 별개 키이고, CI
+      # 컨테이너 안에서만 쓰는 값이라 민감정보 아님 — repo secrets 불필요.
+      # (#99에서 발견: 이 값이 없어서 JwtKeyProvider의 @PostConstruct가 Base64
+      # 디코딩에 실패해 CI 테스트가 전부 깨지고 있었음 — main 브랜치에서 실측 확인)
+      JWT_PRIVATE_KEY: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRQ2cvSWJCVmwwajlUUnMKd3hIeUdRT01ZQmtBMC9ySDlhSmRGdjhPUE9nMld2Wjk2ZmRIcXh2VzBVajlnSVNwNjhNNE5lWEZlYXYyVmhHTwpacENoN01IbVQ2V2NhejFXWDYrWVFoeFcvTUNQa1RSUEN3cWl4VWhuMGhyWG1wZ1NPbDUyaE5nUjVPZHZlbjU0CnVQME1NTnFESUZkWkJOcW43WVN3Q2I3QVRkcVpIYWVVWW5YODJqVXhCQm1rM29ZSEFxKzQ5Q05neDc1amhIMEQKVG54MXhtWjAyUVYxVElieEk0OGE0djgzNXJtOFJtNjNWY05tVzhkcnpjY3ZhRzRrYmlVOEF1Y1NTQTJKWVlFVwpvR3dRRWJwOC9HUEJqb3RXaUNFL2ZpSTFlSEpmaWR3SEZLcnIwZ0o4Z1g5N3B5RzVrSHFyYTVzMloxcnIyWHZ3ClFHSU5SRTRyQWdNQkFBRUNnZ0VBQTJmL0hKZ2g0R0RsSmIxUU9Ubk9SQlRFY3FxME9RYmtLSlFUL0NQTnhnTlIKWG9OVXpXOW12TG93NW9HUm9sd2FzQUJ6OFhtMjZiOW9kUVdMM3phTjQ3eExyMjVBSGY1b1RoQnRYbW5QL283KwpvYTJFekJlTE1LY3NGT1BGMC9JOWpXOFhlSjdKOFh5UXNIMDVpQjNWMXhzWUUxOXhsa2F3U0FsQ0ZVK1FaZGVjCjJUaUpOR0NjWnRQaTlOengwQzJuSVRsR002V0VITG9rSXpJQVM3QjZJcDU2QTllOWw2eDJCeGdydFdQcy9kTnoKMUMvOE8xYUVxSExVWEdSV05MQ0xGWFQ1bGRYYml2U083VlJnQkZ6RUZycCtQTEczNUs2aXZGUUZ3aXFwTjUzMQpxZnI2QThCNWR2d09TRlpJWVdEZUdCdkJtdzBRWVZRMjlqWU51RlVvQVFLQmdRRFhBcURBUUVhSFhUZnJMMzJ5CkVFclNLWEFCUEg1S1hSWCs5V2IvMW9Zc2ZGcG1QZnU0dG1YYVcwY0NBNnhYWVR0T1BvVCsxWHlpUVkxRDR5Z2wKY3g1UE14OFd4WnRndjczMHdyQ2MwZXRPblRLT3FiVWhydStqVHBMMkdoRWhuUU1jYzhVTXpLd2ZHOCsrc2JSMQplREVyeEFYbDUzM0haUjloOHlPV1dQQWZtd0tCZ1FDL3JWRUVGMUdRNG9ON25NZjI5Tmo2VW1VNVd6czRpTGtwCjNuNTVIQ2VGTnVlYzBaTitsWEJZaGRtQW02NGhEREU0cVZlVkx1TVZtaG0zb0U2UzEzTlM5Uy9PVGNNUkVYOUQKSGloc0p4ejc5NjVVd0RvSzcwQjU4cC8wejRMQWxlRFpyY2NBMFdWcTNMaW9XTnZrN3Uwd3NXVG1SRlBHQ2RFdgpzZGtkdWJTY3NRS0JnUUNDR2V6N1orbEZiM3F1clFYNkFUSEZDWjNrb1o0cGtUb0dGS2hHbHFDSnVwVlkySmpBCnBGM3RTdDRrc2VSTzIxN3ZjWlU0UGlZMGFFWDZsakZzdDhQWFdLK3ZMOU5kTDZqWnVoVDBUM0Y3R0ZQSFQ1bHkKMEUvaEdXS0QyRElWak5TZEd0QlpkbCtRVTF2Wm45MzZWc2dxRzJzV09vVTVhazhiRGV5eXhRNUhrUUtCZ0RIbwpScmZ4K21MbkY2VVA1V0QvejU4ZDVRMVNHOUZVaUNIR3ROZUQ1U1ppYlZ2L2xZL1lDVENEYVdaN0lwT29RUWluCnp3NGc3eStvdUJsL3UvV3Y4MjhlT0J4WFV2c1d1elFXbmgvSzcxa0wzSEJrdkxnc0kzV2RIdGozVHV3bUdpMlQKZWNWVXdEdGF6Um5JU1RrS25PZVl5TlRMNWFRaTJqeTQ2ZmM3YXpPQkFvR0JBSTZxb3N6OVBuMEgvRWZlazR4cAo0M3lzZC8yQVJBWGFIMkpJRkhNaDNxV3krdzU2eUhsMmNFZ2x1NGxtRWkyUDRVYzJDL3cwME5lbmhKWW1xYlRsCkwvZS9vOWtZeEIwbjlWMStPTzFkekY0MlhiNXVYeWgwSFlTWm9qQ0Z1Tk5KMENsQ2IyMWJad0VtdHJMdnIxTEEKc3lmRmVnVTM2bzl4am1nOEltYjVXSGJyCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+      JWT_PUBLIC_KEY: LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUFvUHlHd1ZaZEkvVTBiTU1SOGhrRApqR0FaQU5QNngvV2lYUmIvRGp6b05scjJmZW4zUjZzYjF0RkkvWUNFcWV2RE9EWGx4WG1yOWxZUmptYVFvZXpCCjVrK2xuR3M5Vmwrdm1FSWNWdnpBajVFMFR3c0tvc1ZJWjlJYTE1cVlFanBlZG9UWUVlVG5iM3ArZUxqOURERGEKZ3lCWFdRVGFwKzJFc0FtK3dFM2FtUjJubEdKMS9ObzFNUVFacE42R0J3S3Z1UFFqWU1lK1k0UjlBMDU4ZGNabQpkTmtGZFV5RzhTT1BHdUwvTithNXZFWnV0MVhEWmx2SGE4M0hMMmh1Skc0bFBBTG5Fa2dOaVdHQkZxQnNFQkc2CmZQeGp3WTZMVm9naFAzNGlOWGh5WDRuY0J4U3E2OUlDZklGL2U2Y2h1WkI2cTJ1Yk5tZGE2OWw3OEVCaURVUk8KS3dJREFRQUIKLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==
 
     steps:
       - uses: actions/checkout@v4
@@ -86,8 +92,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: build/reports/tests/test
+          # #99: 멀티모듈이라 리포트가 루트가 아니라 서브프로젝트별 build/에 생김
+          path: '*/build/reports/tests/test'
           retention-days: 7
 
-      - name: Build jar
-        run: ./gradlew bootJar --no-daemon
+      - name: Build jars
+        # #99: 멀티모듈 전환으로 루트엔 더 이상 spring-boot 플러그인이 없어서
+        # 부팅 가능한 서비스 모듈 3개를 각각 지정해야 한다.
+        run: ./gradlew :user-server:bootJar :attendance-server:bootJar :chatting-server:bootJar --no-daemon

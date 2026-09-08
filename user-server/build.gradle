@@ -1,0 +1,52 @@
+// #99: 기존 모놀리스 코드 전부(Employee/Attendance/Annual/Post/Chat 도메인).
+// attendance-server/chatting-server가 실제로 코드를 이어받기 전까지(#100/#101)는
+// 사실상 예전 chulgunhaza-backend 그 자체 — 포트도 기존과 동일하게 8081.
+plugins {
+    id 'org.springframework.boot'
+}
+
+dependencies {
+    implementation project(':common')
+
+    // spring
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // spring-security
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // redis (#98: 세션 스토어로는 더 이상 안 쓰고, refresh 토큰 저장용 RedisTemplate만 사용)
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // JWT (#98: 세션 인증 → RS256 JWT 전환. 발급/검증 로직 자체는 common 모듈)
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // rabbitMQ
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+
+    // websocket
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+    // serialize
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // gson
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
+
+    // spring retry
+    implementation 'org.springframework.retry:spring-retry'
+
+    // openapi / swagger (#52)
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+
+    // AOP 기반 요청 로깅 (#51)
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+}

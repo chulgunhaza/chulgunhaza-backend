@@ -11,16 +11,25 @@
 - 접속 가능한 MySQL 8.x (로컬에 별도로 띄우거나 이미 있는 인스턴스를 사용 — `compose.yaml`에는 포함되어 있지 않습니다)
 
 ### 1. 백엔드 (이 저장소)
+
+**#99로 Gradle 멀티모듈로 바뀌었습니다** — 지금 실제로 도는 앱은 `user-server`
+모듈이고, `attendance-server`/`chatting-server`는 아직 최소 스켈레톤입니다
+(자세한 구조는 [docs/multi-module-structure.md](docs/multi-module-structure.md) 참고).
+
 ```bash
 git clone https://github.com/chulgunhaza/chulgunhaza-backend.git
 cd chulgunhaza-backend
 cp .env.example .env   # 값 채우기(각 변수 설명은 .env.example 주석 참고)
 
+# MySQL에 스키마부터 만들어야 합니다 (user/attendance/chatting 3개로 분리됨).
+# root 계정 필요 — MYSQL_ROOT_PASSWORD는 MySQL 컨테이너를 처음 띄울 때 지정한 값.
+docker exec -i chulgunhaza-mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < docs/sql/create-schemas.sql
+
 # .env는 파일로 존재하는 것만으로는 안 되고, 셸에 export까지 돼 있어야
 # ${DATABASE_URL} 같은 플레이스홀더가 실제 값으로 치환됩니다 — 안 하면
 # "Unable to determine Dialect without JDBC metadata" 에러가 납니다.
 set -a && source .env && set +a
-./gradlew bootRun --args='--server.port=8081'
+./gradlew :user-server:bootRun --args='--server.port=8081'
 ```
 서버가 뜨면 `spring-boot-docker-compose`가 redis/rabbitmq 컨테이너를 자동으로 띄우고, `DataInitializer`가 로그인 테스트 계정과 채팅 더미 데이터를 자동으로 만듭니다(아래 3번 참고).
 
@@ -172,12 +181,12 @@ graph TB
 
 ## 인프라 / docker-compose
 
-`compose.yaml` 은 로컬 개발 편의를 위한 보조 인프라만 담당하고, MySQL은 포함되어 있지 않습니다(환경변수 `DATABASE_URL` 로 외부 MySQL을 직접 가리킵니다). `spring-boot-docker-compose`(devtools) 의존성 덕분에 로컬에서 앱을 뜨우면 스프링이 이 compose 파일을 자동으로 `up` 시켜줍니다.
+`user-server/compose.yaml` 은 로컬 개발 편의를 위한 보조 인프라만 담당하고, MySQL은 포함되어 있지 않습니다(환경변수 `DATABASE_URL` 로 외부 MySQL을 직접 가리킵니다). `spring-boot-docker-compose`(devtools) 의존성 덕분에 로컬에서 앱을 뜨우면 스프링이 이 compose 파일을 자동으로 `up` 시켜줍니다 — `spring-boot-docker-compose`가 compose 파일을 **부팅한 모듈의 작업 디렉터리 기준**으로 찾기 때문에(#99), 멀티모듈 전환 후 이 파일을 저장소 루트에서 `user-server/` 아래로 옮겼습니다.
 
 | 서비스 | 이미지 | 포트 | 역할 |
 |---|---|---|---|
 | rabbitmq | rabbitmq:management | 5672(AMQP), 15672(관리 UI) | 채팅/근태 메시지 큐 |
-| redis | redis:latest | 6379 | 세션 스토어 |
+| redis | redis:latest | 6379 | refresh 토큰 저장소(#98) |
 | MySQL | (compose 밖, 외부) | 3306 | 메인 데이터베이스 |
 
 자세한 실행 순서는 맨 위 "실행 가이드"를 참고하세요 — 시드 계정에 딸린 채팅 더미 데이터(동료 10명과의 1:1 방 10개, 방마다 메시지 250개)까지 거기서 함께 안내합니다.
@@ -205,11 +214,11 @@ graph TB
 - GitHub Actions CI(테스트 자동 실행), 쿼리 카운트 기반 성능 회귀 테스트
 - 관리자 페이지(사원/근태/연차 결재/대시보드 통계), 게시글 고정 + 작성자 권한 검사, 연차 사용 이력 조회([#79](https://github.com/chulgunhaza/chulgunhaza-backend/issues/79)), 채팅 큐 데드레터([#73](https://github.com/chulgunhaza/chulgunhaza-backend/issues/73)), AttendanceListener DLQ ack 누락 수정([#76](https://github.com/chulgunhaza/chulgunhaza-backend/issues/76)), AOP 요청 로깅 + 로그 파일 롤링([#51](https://github.com/chulgunhaza/chulgunhaza-backend/issues/51)), 로그인 직후 세션 레이스 컨디션 원인 규명·수정([#65](https://github.com/chulgunhaza/chulgunhaza-backend/issues/65))
 - **세션(Redis) → JWT(RS256) 인증 전환**([#98](https://github.com/chulgunhaza/chulgunhaza-backend/issues/98)) — [docs/jwt-authentication.md](docs/jwt-authentication.md), 애그리거트 경계 기준 정리 — [docs/aggregate-boundaries.md](docs/aggregate-boundaries.md)
+- **Gradle 멀티모듈 전환 + MySQL 스키마 분리**([#99](https://github.com/chulgunhaza/chulgunhaza-backend/issues/99)) — common/user-server/attendance-server(스켈레톤)/chatting-server(스켈레톤) 4개 모듈로 재구성, 스키마 `chulgunhaza_user`/`chulgunhaza_attendance`/`chulgunhaza_chatting` 분리. 자세한 내용은 [docs/multi-module-structure.md](docs/multi-module-structure.md)
 
 ### 🚧 남은 작업 (GitHub Issues로 트래킹 중)
 | 이슈 | 내용 |
 |---|---|
-| [#99](https://github.com/chulgunhaza/chulgunhaza-backend/issues/99) | Gradle 멀티모듈 전환 + MySQL 스키마 분리(user/attendance/chatting) |
 | [#100](https://github.com/chulgunhaza/chulgunhaza-backend/issues/100) | attendance-server 물리 분리 (1차 착수) |
 | [#101](https://github.com/chulgunhaza/chulgunhaza-backend/issues/101) | chatting-server 물리 분리 + Redis Pub/Sub 팬아웃 |
 | [#102](https://github.com/chulgunhaza/chulgunhaza-backend/issues/102) | user-server 정리 + 사원 이벤트(EmployeeCreateEvent 등) 실구현 |

@@ -1,0 +1,12 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: chatting-server
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
