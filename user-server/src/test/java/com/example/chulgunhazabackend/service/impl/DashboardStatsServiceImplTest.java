@@ -1,7 +1,7 @@
 package com.example.chulgunhazabackend.service.impl;
 
+import com.example.chulgunhazabackend.client.AttendanceStatsClient;
 import com.example.chulgunhazabackend.dto.dashboard.DashboardStatsResponseDto;
-import com.example.chulgunhazabackend.repository.AttendanceRecordRepository;
 import com.example.chulgunhazabackend.repository.EmployeeRepository;
 import com.example.chulgunhazabackend.repository.PostRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -11,18 +11,17 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
 /**
  * Epic 6 — 대시보드 통계 집계의 서비스 계층 단위 테스트.
- * 사원/근태/게시판 세 리포지토리를 모두 모킹해 순수 집계 로직만 검증한다.
+ * #100: attendance-server 물리 분리로 오늘 출근 수는 더 이상 리포지토리 직접
+ * 조회가 아니라 AttendanceStatsClient(내부 API 호출) 값이다 — 그 클라이언트를
+ * 모킹한다. 당일 00:00~내일 00:00 날짜 범위 계산 로직 자체는 attendance-server의
+ * InternalAttendanceController로 옮겨갔다.
  */
 @ExtendWith(MockitoExtension.class)
 class DashboardStatsServiceImplTest {
@@ -31,10 +30,10 @@ class DashboardStatsServiceImplTest {
     private EmployeeRepository employeeRepository;
 
     @Mock
-    private AttendanceRecordRepository attendanceRecordRepository;
+    private PostRepository postRepository;
 
     @Mock
-    private PostRepository postRepository;
+    private AttendanceStatsClient attendanceStatsClient;
 
     @InjectMocks
     private DashboardStatsServiceImpl dashboardStatsService;
@@ -44,7 +43,7 @@ class DashboardStatsServiceImplTest {
     void getStats_데이터가_없으면_전부_0이다() {
         given(employeeRepository.countByDelFlagFalse()).willReturn(0L);
         given(employeeRepository.countActiveEmployeesByDepartment()).willReturn(List.of());
-        given(attendanceRecordRepository.countByCheckInTimeBetween(any(), any())).willReturn(0L);
+        given(attendanceStatsClient.getTodayCheckInCount()).willReturn(0L);
         given(postRepository.countByDelFlagFalse()).willReturn(0L);
 
         DashboardStatsResponseDto stats = dashboardStatsService.getStats();
@@ -56,11 +55,11 @@ class DashboardStatsServiceImplTest {
     }
 
     @Test
-    @DisplayName("사원 수/오늘 출근 수/게시글 수가 각 리포지토리 값 그대로 반영된다")
+    @DisplayName("사원 수/오늘 출근 수/게시글 수가 각 소스 값 그대로 반영된다")
     void getStats_기본_카운트가_정확히_반영된다() {
         given(employeeRepository.countByDelFlagFalse()).willReturn(42L);
         given(employeeRepository.countActiveEmployeesByDepartment()).willReturn(List.of());
-        given(attendanceRecordRepository.countByCheckInTimeBetween(any(), any())).willReturn(17L);
+        given(attendanceStatsClient.getTodayCheckInCount()).willReturn(17L);
         given(postRepository.countByDelFlagFalse()).willReturn(8L);
 
         DashboardStatsResponseDto stats = dashboardStatsService.getStats();
@@ -78,7 +77,7 @@ class DashboardStatsServiceImplTest {
                 new Object[]{"개발팀", 3L},
                 new Object[]{"인사팀", 2L}
         ));
-        given(attendanceRecordRepository.countByCheckInTimeBetween(any(), any())).willReturn(0L);
+        given(attendanceStatsClient.getTodayCheckInCount()).willReturn(0L);
         given(postRepository.countByDelFlagFalse()).willReturn(0L);
 
         DashboardStatsResponseDto stats = dashboardStatsService.getStats();
@@ -98,7 +97,7 @@ class DashboardStatsServiceImplTest {
                 new Object[]{"개발팀", 3L},
                 new Object[]{"영업팀", 2L}
         ));
-        given(attendanceRecordRepository.countByCheckInTimeBetween(any(), any())).willReturn(0L);
+        given(attendanceStatsClient.getTodayCheckInCount()).willReturn(0L);
         given(postRepository.countByDelFlagFalse()).willReturn(0L);
 
         DashboardStatsResponseDto stats = dashboardStatsService.getStats();
@@ -108,21 +107,16 @@ class DashboardStatsServiceImplTest {
     }
 
     @Test
-    @DisplayName("오늘 출근 수는 오늘 00:00~내일 00:00 범위로 조회된다")
-    void getStats_오늘_출근수는_당일_범위로_조회한다() {
+    @DisplayName("오늘 출근 수는 AttendanceStatsClient가 준 값을 그대로 사용한다")
+    void getStats_오늘_출근수는_클라이언트_값을_그대로_사용한다() {
         given(employeeRepository.countByDelFlagFalse()).willReturn(0L);
         given(employeeRepository.countActiveEmployeesByDepartment()).willReturn(List.of());
-        given(attendanceRecordRepository.countByCheckInTimeBetween(any(), any())).willReturn(9L);
+        given(attendanceStatsClient.getTodayCheckInCount()).willReturn(9L);
         given(postRepository.countByDelFlagFalse()).willReturn(0L);
-
-        LocalDateTime expectedStart = LocalDate.now().atStartOfDay();
-        LocalDateTime expectedEnd = expectedStart.plusDays(1);
 
         DashboardStatsResponseDto stats = dashboardStatsService.getStats();
 
         assertThat(stats.getTodayAttendanceCount()).isEqualTo(9);
-        org.mockito.Mockito.verify(attendanceRecordRepository)
-                .countByCheckInTimeBetween(expectedStart, expectedEnd);
     }
 
     @Test
@@ -134,7 +128,7 @@ class DashboardStatsServiceImplTest {
                 new Object[]{"개발팀", 1L},
                 new Object[]{"개발팀", 99L}
         ));
-        given(attendanceRecordRepository.countByCheckInTimeBetween(any(), any())).willReturn(0L);
+        given(attendanceStatsClient.getTodayCheckInCount()).willReturn(0L);
         given(postRepository.countByDelFlagFalse()).willReturn(0L);
 
         DashboardStatsResponseDto stats = dashboardStatsService.getStats();

@@ -2,7 +2,6 @@ package com.example.chulgunhazabackend.listener;
 
 import com.example.chulgunhazabackend.config.RabbitMQConfig;
 import com.example.chulgunhazabackend.dto.attendance.AttendanceCreateRequestDto;
-import com.example.chulgunhazabackend.exception.employeeException.EmployeeException;
 import com.example.chulgunhazabackend.service.AttendanceService;
 import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
@@ -32,11 +31,11 @@ public class AttendanceListener {
             attendanceService.registerAttendance(attendanceCreateRequestDto);
             channel.basicAck(tag, false); // 성공
             System.out.println("디큐 완료");
-        }catch (EmployeeException e){
-
-            System.out.println("확인 : " + e.getMessage());// 메세지를 보내야 함 (출근 등록이 실패하였습니다 : 이유)
-            channel.basicNack(tag, false, false); // 큐에 있는 메세지 삭제
-
+            // #100: 예전엔 여기 EmployeeException 전용 catch가 있었다 — 사원 존재
+            // 확인을 위해 EmployeeRepository를 직접 조회하던 시절의 코드였는데,
+            // 이제 employeeNo/employeeName이 컨트롤러 단계(JWT 클레임)에서 이미
+            // 확정돼 들어오므로 그 조회 자체가 없어졌다. EmployeeException 타입도
+            // user-server 전용이라 이 모듈 클래스패스에 없다.
         }catch (Exception e) {
             // DLQ 이동 — 실패 사유(mqFailMessage)를 메시지에 남겨서 원본 그대로 보내는
             // 게 아니라 직접 재발행한다. 컨테이너가 MANUAL ack 모드라(RabbitMQConfig),

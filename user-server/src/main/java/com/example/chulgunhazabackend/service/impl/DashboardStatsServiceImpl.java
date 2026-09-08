@@ -1,7 +1,7 @@
 package com.example.chulgunhazabackend.service.impl;
 
+import com.example.chulgunhazabackend.client.AttendanceStatsClient;
 import com.example.chulgunhazabackend.dto.dashboard.DashboardStatsResponseDto;
-import com.example.chulgunhazabackend.repository.AttendanceRecordRepository;
 import com.example.chulgunhazabackend.repository.EmployeeRepository;
 import com.example.chulgunhazabackend.repository.PostRepository;
 import com.example.chulgunhazabackend.service.DashboardStatsService;
@@ -9,8 +9,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -21,8 +19,10 @@ import java.util.stream.Collectors;
 public class DashboardStatsServiceImpl implements DashboardStatsService {
 
     private final EmployeeRepository employeeRepository;
-    private final AttendanceRecordRepository attendanceRecordRepository;
     private final PostRepository postRepository;
+    // #100: attendance-server 물리 분리로 AttendanceRecordRepository를 직접 못
+    // 쓰게 돼서, 내부 API를 호출하는 클라이언트로 교체했다.
+    private final AttendanceStatsClient attendanceStatsClient;
 
     @Override
     public DashboardStatsResponseDto getStats() {
@@ -37,9 +37,7 @@ public class DashboardStatsServiceImpl implements DashboardStatsService {
                         LinkedHashMap::new
                 ));
 
-        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
-        LocalDateTime todayEnd = todayStart.plusDays(1);
-        long todayAttendanceCount = attendanceRecordRepository.countByCheckInTimeBetween(todayStart, todayEnd);
+        long todayAttendanceCount = attendanceStatsClient.getTodayCheckInCount();
 
         long totalPosts = postRepository.countByDelFlagFalse();
 

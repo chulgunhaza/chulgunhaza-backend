@@ -29,7 +29,9 @@ public class NotificationController{
     }
 
     // #46: 근태(출근 등록, 연차 사용 등) MAIN SSE 알림 구독.
-    // CHAT과 달리 이 채널은 employeeNo로 키잉된다 (AttendanceCreateEvent 등 기존 이벤트 발행 규약과 동일하게 맞춤).
+    // CHAT과 달리 이 채널은 employeeNo로 키잉된다 (#100: attendance-server가
+    // MainNotificationDto를 RabbitMQ로 보내오는 것도, AnnualUseEventHandler가
+    // 인프로세스로 보내는 것도 전부 이 규약을 따른다).
     @GetMapping(value = "/subscribe/main", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter subscribeMain(@AuthenticationPrincipal EmployeeCredentialDto employeeCredentialDto) throws IOException {
         return attendanceAlarmService.subscribe(employeeCredentialDto.getEmployeeNo());

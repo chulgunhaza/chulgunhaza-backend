@@ -2,6 +2,7 @@ package com.example.chulgunhazabackend.security.filter;
 
 import com.example.chulgunhazabackend.dto.Employee.EmployeeCredentialDto;
 import com.example.chulgunhazabackend.security.jwt.CookieUtil;
+import com.example.chulgunhazabackend.security.jwt.JwtAuthProperties;
 import com.example.chulgunhazabackend.security.jwt.JwtProvider;
 import com.google.gson.Gson;
 import io.jsonwebtoken.Claims;
@@ -33,15 +34,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    // JWT 인증 없이도 열람 가능해야 하는 경로. 로그인/재발급은 아직 유효한 access
-    // 토큰이 없는 상태에서 호출되는 게 정상이라 여기서 빼둔다.
-    private static final List<String> NO_AUTH_CHECK_PREFIXES = List.of(
-            "/v1/employee/login",
-            "/v1/employee/token/refresh",
-            "/swagger-ui",
-            "/v3/api-docs"
-    );
-
     // JWT 검증 실패 시 재구성하는 EmployeeCredentialDto용 더미 password. User(email,
     // password, authorities) 상위 생성자가 비어있는 password를 거부해서 채워 넣을 뿐,
     // 이미 서명 검증으로 인증이 끝난 뒤라 이 값이 실제로 쓰이는 곳은 없다.
@@ -49,11 +41,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
     private final CookieUtil cookieUtil;
+    // #100: 인증 없이 통과할 경로 목록을 서비스별 application.yml(jwt.auth.exempt-path-prefixes)로
+    // 뺐다 — 예전엔 여기 하드코딩(로그인/재발급/swagger 4개 고정)이라 attendance-server
+    // 같은 새 서비스가 자기만의 예외 경로(/internal, /actuator)를 추가할 방법이 없었다.
+    private final JwtAuthProperties jwtAuthProperties;
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return NO_AUTH_CHECK_PREFIXES.stream().anyMatch(path::startsWith);
+        return jwtAuthProperties.getExemptPathPrefixes().stream().anyMatch(path::startsWith);
     }
 
     @Override

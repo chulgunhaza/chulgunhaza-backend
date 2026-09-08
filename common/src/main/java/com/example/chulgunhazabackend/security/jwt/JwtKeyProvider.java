@@ -3,6 +3,7 @@ package com.example.chulgunhazabackend.security.jwt;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
@@ -27,9 +28,14 @@ public class JwtKeyProvider {
 
     private PublicKey publicKey;
 
+    // #100: attendance-server처럼 토큰을 검증만 하고 발급은 안 하는 서비스는
+    // private key가 아예 필요 없다 — 없으면 파싱을 건너뛴다(JwtProvider.issue*
+    // 계열은 그런 서비스에서 애초에 호출되지 않으므로 null이어도 안전).
     @jakarta.annotation.PostConstruct
     public void init() throws NoSuchAlgorithmException, InvalidKeySpecException {
-        this.privateKey = parsePrivateKey(jwtProperties.getPrivateKey());
+        if (StringUtils.hasText(jwtProperties.getPrivateKey())) {
+            this.privateKey = parsePrivateKey(jwtProperties.getPrivateKey());
+        }
         this.publicKey = parsePublicKey(jwtProperties.getPublicKey());
     }
 

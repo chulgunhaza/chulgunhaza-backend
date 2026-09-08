@@ -5,8 +5,45 @@ spring:
   application:
     name: attendance-server
 
+  datasource:
+    url: ${ATTENDANCE_DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  # user-server의 compose.yaml이 띄운 RabbitMQ에 그대로 붙는다 — 이 모듈은
+  # spring-boot-docker-compose를 안 쓰므로(중복 컨테이너 방지, #99에서 겪은
+  # user-server-redis-1/chulgunhaza-backend-redis-1 이름 충돌 참고) 접속 정보를
+  # 명시적으로 지정한다.
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: ${RMQ_USER}
+    password: ${RMQ_PASS}
+
 management:
   endpoints:
     web:
       exposure:
         include: health
+
+# #98: JWT 검증 전용 — 이 서비스는 로그인/발급을 하지 않으므로 public key만 있으면
+# 된다(JwtKeyProvider가 private-key 미설정을 정상 처리).
+jwt:
+  public-key: ${JWT_PUBLIC_KEY}
+  # #100: 내부 호출 경로(대시보드 통계)와 actuator 헬스체크는 JWT 없이 열람 가능해야 한다.
+  auth:
+    exempt-path-prefixes:
+      - /internal
+      - /actuator
+
+# #54와 동일한 CORS 화이트리스트 계약(common의 AppCorsConfigurationSource가 읽음).
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}

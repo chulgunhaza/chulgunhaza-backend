@@ -20,7 +20,8 @@ public class RabbitMQConfig {
     public static final String CHAT_QUEUE_NAME = "chulgunhazabackend_chat_queue";
 
     // INFO: Domain Queue - MAIN
-    public static final String ATTENDANCE_QUEUE_NAME = "chulgunhazabackend_attendance_queue";
+    // #100: ATTENDANCE_QUEUE_NAME/큐/바인딩은 attendance-server로 이전됐다
+    // (attendance-server/config/RabbitMQConfig.java) — 여긴 더 이상 소비하지 않음.
     public static final String LEAVE_WORK_QUEUE_NAME = "chulgunhazabackend_leave_work_queue";
 
     // INFO: Notification Queue - CHAT
@@ -41,13 +42,14 @@ public class RabbitMQConfig {
     public static final String CHAT_NOTIFICATION_ROUTING_KEY = "chat_notification_queue_key";
 
     // INFO: Routing Key - Main
-    public static final String ATTENDANCE_ROUTING_KEY = "attendance_queue_key";
     public static final String LEAVE_WORK_ROUTING_KEY = "leave_work_queue_key";
+    // #100: attendance-server가 이 exchange/키로 MainNotificationDto를 발행하고,
+    // 아래 mainNotificationQueue/mainNotificationBinding이 그걸 소비한다
+    // (MainNotificationListener 참고) — 예전엔 아무도 안 쓰던 빈 배관이었다.
     public static final String MAIN_NOTIFICATION_ROUTING_KEY = "main_notification_queue_key";
 
     // Dead - Letter
     public static final String DLX = "deadLetterExchange";
-    public static final String A_DLQ = "attendanceDeadLetterQueue";
     // #73: 채팅 큐엔 데드레터가 없어서 처리 실패한 메시지가 그냥 드롭되고 나중에
     // 다시 조사할 방법이 없었다(ChatMessageListener 참고). attendanceQueue와 같은
     // 패턴으로 데드레터 큐를 추가한다.
@@ -69,14 +71,6 @@ public class RabbitMQConfig {
     }
 
     @Bean
-    public Queue attendanceQueue() {
-        return QueueBuilder.durable(ATTENDANCE_QUEUE_NAME)
-                .withArgument("x-dead-letter-exchange", DLX)
-                .withArgument("x-dead-letter-routing-key", A_DLQ)
-                .build();
-    }
-
-    @Bean
     public Queue leaveWorkQueue() {
         return new Queue(LEAVE_WORK_QUEUE_NAME,true);
     }
@@ -84,11 +78,6 @@ public class RabbitMQConfig {
     @Bean
     public Queue mainNotificationQueue() {
         return new Queue(MAIN_NOTIFICATION_QUEUE_NAME,true);
-    }
-
-    @Bean
-    public Queue attendanceDeadLetterQueue(){
-        return QueueBuilder.durable(A_DLQ).build();
     }
 
     @Bean
@@ -122,10 +111,6 @@ public class RabbitMQConfig {
     }
 
     @Bean
-    public Binding mainAttendanceBinding() {
-        return BindingBuilder.bind(attendanceQueue()).to(mainExchange()).with(ATTENDANCE_ROUTING_KEY);
-    }
-    @Bean
     public Binding mainLeaveWorkBinding() {
         return BindingBuilder.bind(leaveWorkQueue()).to(mainExchange()).with(LEAVE_WORK_ROUTING_KEY);
     }
@@ -133,11 +118,6 @@ public class RabbitMQConfig {
     @Bean
     public Binding mainNotificationBinding() {
         return BindingBuilder.bind(mainNotificationQueue()).to(mainExchange()).with(MAIN_NOTIFICATION_ROUTING_KEY);
-    }
-
-    @Bean
-    public Binding attendanceDeadLetterBinding() {
-        return BindingBuilder.bind(attendanceDeadLetterQueue()).to(deadLetterExchange()).with(A_DLQ);
     }
 
     @Bean

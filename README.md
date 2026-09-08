@@ -12,9 +12,10 @@
 
 ### 1. 백엔드 (이 저장소)
 
-**#99로 Gradle 멀티모듈로 바뀌었습니다** — 지금 실제로 도는 앱은 `user-server`
-모듈이고, `attendance-server`/`chatting-server`는 아직 최소 스켈레톤입니다
-(자세한 구조는 [docs/multi-module-structure.md](docs/multi-module-structure.md) 참고).
+**#99로 Gradle 멀티모듈로 바뀌었습니다** — `user-server`(사원/연차/게시판/대시보드,
+:8081)와 `attendance-server`(근태, #100으로 실제 서비스가 됨, :8082)를 같이
+띄워야 근태 기능까지 정상 동작합니다. `chatting-server`는 아직 최소
+스켈레톤입니다(자세한 구조는 [docs/multi-module-structure.md](docs/multi-module-structure.md) 참고).
 
 ```bash
 git clone https://github.com/chulgunhaza/chulgunhaza-backend.git
@@ -30,8 +31,12 @@ docker exec -i chulgunhaza-mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < docs/sq
 # "Unable to determine Dialect without JDBC metadata" 에러가 납니다.
 set -a && source .env && set +a
 ./gradlew :user-server:bootRun --args='--server.port=8081'
+
+# 근태(출퇴근) 기능까지 쓰려면 별도 터미널에서 attendance-server도 띄웁니다.
+set -a && source .env && set +a
+./gradlew :attendance-server:bootRun
 ```
-서버가 뜨면 `spring-boot-docker-compose`가 redis/rabbitmq 컨테이너를 자동으로 띄우고, `DataInitializer`가 로그인 테스트 계정과 채팅 더미 데이터를 자동으로 만듭니다(아래 3번 참고).
+`user-server`가 뜨면 `spring-boot-docker-compose`가 redis/rabbitmq 컨테이너를 자동으로 띄우고, `DataInitializer`가 로그인 테스트 계정과 채팅 더미 데이터를 자동으로 만듭니다(아래 3번 참고). `attendance-server`는 이 컨테이너를 그대로 재사용하므로 순서상 `user-server`를 먼저 띄우는 걸 권장합니다.
 
 ### 2. 프론트엔드
 ```bash
@@ -166,10 +171,11 @@ graph TB
 - `Chat`/`Attendance`/`AnnualRecord` 도메인은 `Employee`를 `@ManyToOne` 객체 참조가 아니라 `Long employeeId` 값으로만 참조합니다 — 서로 다른 애그리게이트가 객체 그래프로 직접 결합돼 있으면 한쪽 데이터 정합성 문제가 다른 도메인 쿼리까지 깨뜨릴 수 있다는 걸 실제 인시던트로 겪은 뒤([#72](https://github.com/chulgunhaza/chulgunhaza-backend/pull/72)) 정리했고, 장기적으로는 이 도메인들을 별도 서비스로 분리하는 것까지 염두에 두고 있습니다([#74](https://github.com/chulgunhaza/chulgunhaza-backend/issues/74)). `Post`는 아직 이 규칙을 못 지키고 있는 예외인데, 애그리거트 판단 기준과 서비스별 매핑 전체는 [docs/aggregate-boundaries.md](docs/aggregate-boundaries.md)에 정리했습니다.
 
 ### 메시징(RabbitMQ) 토폴로지
-- `chulgunhazabackend_main` Exchange(Direct) → `attendance_queue`(출근 등록), `leave_work_queue`(연차), `main_notification_queue`(근태 알림)
+- `chulgunhazabackend_main` Exchange(Direct, user-server와 attendance-server가 각자 선언하지만 같은 브로커의 같은 exchange를 가리킴) → `attendance_queue`(출근 등록, attendance-server가 발행+소비), `leave_work_queue`(연차), `main_notification_queue`(근태/연차 알림 — **#100부터 attendance-server가 발행하고 user-server의 `MainNotificationListener`가 소비**하는 교차 서비스 채널)
 - `chulgunhazabackend_chat` Exchange(Direct) → `chat_queue`(채팅 저장), `chat_notification_queue`(채팅 알림)
-- `attendance_queue` 는 `x-dead-letter-exchange` 로 `deadLetterExchange` 를 지정해두어, 컨슈머가 `basicNack` 하면 메시지가 `attendanceDeadLetterQueue` 로 이동하고, `AttendanceDeadLetterListener` 가 `@Retryable`(최대 3회, 1초 간격)로 재처리를 시도한 뒤 실패하면 `@Recover` 로 넘어갑니다.
+- `attendance_queue` 는 `x-dead-letter-exchange` 로 `deadLetterExchange` 를 지정해두어, 컨슈머가 `basicNack` 하면 메시지가 `attendanceDeadLetterQueue` 로 이동하고, `AttendanceDeadLetterListener`(attendance-server) 가 `@Retryable`(최대 3회, 1초 간격)로 재처리를 시도한 뒤 실패하면 `@Recover` 로 넘어갑니다.
 - 채팅은 WebSocket으로 받은 메시지를 바로 DB에 쓰지 않고 RabbitMQ에 적재한 뒤 `ChatMessageListener` 가 비동기로 저장하도록 해서, 순간적으로 채팅이 몰려도 DB 부하를 큐가 완충합니다.
+- attendance-server가 물리 분리되면서 근태 등록 완료 SSE 알림도 프로세스 경계를 넘어야 했습니다 — RabbitMQ로 이 문제를 푼 상세 설계는 [docs/attendance-server-migration.md](docs/attendance-server-migration.md) 참고.
 
 ### 실시간 통신 (WebSocket + SSE 조합)
 - **WebSocket**(`/websocket`, `WebSocketMessageHandler`): 채팅방 `subscribe`/`unsubscribe` 세션을 `ConcurrentHashMap<userId, ConcurrentHashMap<chatRoomId, WebSocketSession>>` 형태로 들고 있다가 새 메시지가 오면 바로 push 합니다. STOMP 없이 순수 `WebSocketHandler` + 커스텀 프로토콜로 라우팅하고, `SecurityContextInterceptor` 로 핸드셰이크 시점에 인증 정보를 함께 실어 보냅니다.
@@ -215,15 +221,16 @@ graph TB
 - 관리자 페이지(사원/근태/연차 결재/대시보드 통계), 게시글 고정 + 작성자 권한 검사, 연차 사용 이력 조회([#79](https://github.com/chulgunhaza/chulgunhaza-backend/issues/79)), 채팅 큐 데드레터([#73](https://github.com/chulgunhaza/chulgunhaza-backend/issues/73)), AttendanceListener DLQ ack 누락 수정([#76](https://github.com/chulgunhaza/chulgunhaza-backend/issues/76)), AOP 요청 로깅 + 로그 파일 롤링([#51](https://github.com/chulgunhaza/chulgunhaza-backend/issues/51)), 로그인 직후 세션 레이스 컨디션 원인 규명·수정([#65](https://github.com/chulgunhaza/chulgunhaza-backend/issues/65))
 - **세션(Redis) → JWT(RS256) 인증 전환**([#98](https://github.com/chulgunhaza/chulgunhaza-backend/issues/98)) — [docs/jwt-authentication.md](docs/jwt-authentication.md), 애그리거트 경계 기준 정리 — [docs/aggregate-boundaries.md](docs/aggregate-boundaries.md)
 - **Gradle 멀티모듈 전환 + MySQL 스키마 분리**([#99](https://github.com/chulgunhaza/chulgunhaza-backend/issues/99)) — common/user-server/attendance-server(스켈레톤)/chatting-server(스켈레톤) 4개 모듈로 재구성, 스키마 `chulgunhaza_user`/`chulgunhaza_attendance`/`chulgunhaza_chatting` 분리. 자세한 내용은 [docs/multi-module-structure.md](docs/multi-module-structure.md)
+- **attendance-server 물리 분리**([#100](https://github.com/chulgunhaza/chulgunhaza-backend/issues/100)) — 근태 도메인 전체 이전, employeeNo/employeeName 비정규화, 클라이언트가 보낸 사번을 믿던 IDOR 수정, RabbitMQ 기반 교차 서비스 SSE 알림 파이프라인 구축. 자세한 내용은 [docs/attendance-server-migration.md](docs/attendance-server-migration.md)
 
 ### 🚧 남은 작업 (GitHub Issues로 트래킹 중)
 | 이슈 | 내용 |
 |---|---|
-| [#100](https://github.com/chulgunhaza/chulgunhaza-backend/issues/100) | attendance-server 물리 분리 (1차 착수) |
 | [#101](https://github.com/chulgunhaza/chulgunhaza-backend/issues/101) | chatting-server 물리 분리 + Redis Pub/Sub 팬아웃 |
 | [#102](https://github.com/chulgunhaza/chulgunhaza-backend/issues/102) | user-server 정리 + 사원 이벤트(EmployeeCreateEvent 등) 실구현 |
-| [#74](https://github.com/chulgunhaza/chulgunhaza-backend/issues/74), [#75](https://github.com/chulgunhaza/chulgunhaza-backend/issues/75) | 서비스 분리 로드맵 전체 (위 #99~#102의 상위 이슈) |
-| [#63](https://github.com/chulgunhaza/chulgunhaza-backend/issues/63) | 나머지 서비스 계층(Attendance/Post 등) TDD 테스트 확충 |
+| [#104](https://github.com/chulgunhaza/chulgunhaza-backend/issues/104) | Post.employee를 객체 참조 대신 Long employeeId로 전환 |
+| [#74](https://github.com/chulgunhaza/chulgunhaza-backend/issues/74), [#75](https://github.com/chulgunhaza/chulgunhaza-backend/issues/75) | 서비스 분리 로드맵 전체 (위 #101~#102의 상위 이슈) |
+| [#63](https://github.com/chulgunhaza/chulgunhaza-backend/issues/63) | 나머지 서비스 계층(Post 등) TDD 테스트 확충 |
 | [#60](https://github.com/chulgunhaza/chulgunhaza-backend/issues/60) | HTTPS 적용 |
 | [#53](https://github.com/chulgunhaza/chulgunhaza-backend/issues/53) | 파일 업로드 S3 마이그레이션 |
 | [#50](https://github.com/chulgunhaza/chulgunhaza-backend/issues/50) | 부하 테스트 수행 및 결과 문서화 |
@@ -231,7 +238,7 @@ graph TB
 | [#47](https://github.com/chulgunhaza/chulgunhaza-backend/issues/47) | Spring Batch 기반 출근 정산 |
 | [#56](https://github.com/chulgunhaza/chulgunhaza-backend/issues/56), [#57](https://github.com/chulgunhaza/chulgunhaza-backend/issues/57) | SseEmitter 타임아웃 조정, RabbitMQ 리스너 배치 처리 설계(읽음 처리) |
 
-우선순위 판단 기준은 대체로 "데이터 정합성/보안 > 관측 가능성 > 배포 인프라 > 스케일 검증" 순 — 예를 들어 부하 테스트(#50)나 DB 샤딩(#49)은 동시성 제어가 끝난 뒤, 모니터링이 갖춰진 뒤에 하는 게 의미가 있어서 뒤로 미뤄뒀습니다. 서비스 분리(#99~#102)는 attendance → chatting → user-server 순으로 진행합니다(결합도가 가장 낮은 것부터).
+우선순위 판단 기준은 대체로 "데이터 정합성/보안 > 관측 가능성 > 배포 인프라 > 스케일 검증" 순 — 예를 들어 부하 테스트(#50)나 DB 샤딩(#49)은 동시성 제어가 끝난 뒤, 모니터링이 갖춰진 뒤에 하는 게 의미가 있어서 뒤로 미뤄뒀습니다. 서비스 분리는 attendance(#99/#100, 완료) → chatting(#101) → user-server 정리(#102) 순으로 진행 중입니다(결합도가 가장 낮은 것부터).
 
 ## 팀원 
 |임솔|김태동|

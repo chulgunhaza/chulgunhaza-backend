@@ -21,10 +21,12 @@ public class AttendanceListResponseDto {
 
     private AttendanceType attendanceType;
 
+    // #100: employee_id로 JOIN하던 걸 비정규화된 employeeNo/employeeName 직접
+    // 참조로 교체 — 스키마 분리 후엔 JOIN이 아예 불가능해졌다.
     public static AttendanceListResponseDto fromEntity(AttendanceRecord record) {
         return new AttendanceListResponseDto(
-                record.getEmployee().getEmployeeNo(),
-                record.getEmployee().getName(),
+                record.getEmployeeNo(),
+                record.getEmployeeName(),
                 record.getCheckInTime(),
                 record.getAttendanceType()
         );
