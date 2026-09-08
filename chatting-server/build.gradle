@@ -1,0 +1,10 @@
+// #99/#101: 최소 부팅 스켈레톤. 도메인 코드(ChatRoom 등)와 데이터소스는
+// #101(chatting-server 물리 분리)에서 실제로 옮겨진다 — 지금은 "떠 있는지"만 증명.
+plugins {
+    id 'org.springframework.boot'
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+}

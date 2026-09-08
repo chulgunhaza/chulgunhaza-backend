@@ -1,81 +1,45 @@
+// #99: Gradle 멀티모듈 전환. 루트 자체는 이제 부팅 가능한 앱이 아니라 애그리게이터다
+// (spring-boot 플러그인은 여기서 apply false로 버전만 고정하고, 실제 적용은 서비스
+// 모듈(user-server/attendance-server/chatting-server)에서 각자 한다).
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.3.7'
-    id 'io.spring.dependency-management' version '1.1.7'
+    id 'org.springframework.boot' version '3.3.7' apply false
+    id 'io.spring.dependency-management' version '1.1.7' apply false
 }
 
-group = 'com.example'
-version = '0.0.1-SNAPSHOT'
+allprojects {
+    group = 'com.example'
+    version = '0.0.1-SNAPSHOT'
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+    repositories {
+        mavenCentral()
     }
 }
 
-configurations {
-    compileOnly {
-        extendsFrom annotationProcessor
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'io.spring.dependency-management'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
     }
-}
 
-repositories {
-    mavenCentral()
-}
+    configurations {
+        compileOnly {
+            extendsFrom annotationProcessor
+        }
+    }
 
-dependencies {
+    dependencies {
+        compileOnly 'org.projectlombok:lombok'
+        annotationProcessor 'org.projectlombok:lombok'
+        testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
 
-    // spring
-    implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-validation'
-
-    // spring-security
-    implementation 'org.springframework.boot:spring-boot-starter-security'
-
-    // redis (#98: 세션 스토어로는 더 이상 안 쓰고, refresh 토큰 저장용 RedisTemplate만 사용)
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-
-    // JWT (#98: 세션 인증 → RS256 JWT 전환)
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
-
-    // rabbitMQ
-    implementation 'org.springframework.boot:spring-boot-starter-amqp'
-
-    // websocket
-    implementation 'org.springframework.boot:spring-boot-starter-websocket'
-
-    // serialize
-    implementation 'com.fasterxml.jackson.core:jackson-databind'
-
-    // gson
-    implementation 'com.google.code.gson:gson:2.10.1'
-
-    compileOnly 'org.projectlombok:lombok'
-    developmentOnly 'org.springframework.boot:spring-boot-devtools'
-    runtimeOnly 'com.mysql:mysql-connector-j'
-    compileOnly 'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-
-    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
-
-    implementation 'org.springframework.boot:spring-boot-starter-amqp'
-
-
-    // spring retry
-    implementation 'org.springframework.retry:spring-retry'
-
-    // openapi / swagger (#52)
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
-
-    // AOP 기반 요청 로깅 (#51)
-    implementation 'org.springframework.boot:spring-boot-starter-aop'
-}
-
-tasks.named('test') {
-    useJUnitPlatform()
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
 }

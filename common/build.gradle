@@ -1,0 +1,29 @@
+// #99: 서비스 간 공유 라이브러리 모듈(JWT 발급/검증, EmployeeCredentialDto).
+// 부팅 가능한 앱이 아니라 순수 라이브러리라 spring-boot 플러그인은 적용하지 않고,
+// api/implementation 구분이 필요해서 java-library 플러그인을 쓴다. spring-boot
+// 플러그인을 안 쓰면 BOM이 자동으로 안 딸려오므로 아래에서 직접 import한다.
+plugins {
+    id 'java-library'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.boot:spring-boot-dependencies:3.3.7"
+    }
+}
+
+dependencies {
+    // EmployeeCredentialDto가 Spring Security User를 상속하고, CookieUtil/
+    // JwtAuthenticationFilter가 jakarta.servlet.* 타입을 메서드 시그니처에 노출하며,
+    // JwtProvider.parseClaims()가 io.jsonwebtoken.Claims를 반환한다 — 이 셋 전부
+    // user-server 코드가 직접 참조하므로 api로 노출해야 한다(implementation이면
+    // user-server 컴파일 시 "cannot find symbol"이 남).
+    api 'org.springframework.boot:spring-boot-starter-web'
+    api 'org.springframework.boot:spring-boot-starter-security'
+    api 'io.jsonwebtoken:jjwt-api:0.12.6'
+
+    // 이 모듈 내부에서만 쓰고 외부에 타입을 노출하지 않는 것들
+    implementation 'com.google.code.gson:gson:2.10.1'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+}

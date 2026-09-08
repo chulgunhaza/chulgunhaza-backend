@@ -1,1 +1,10 @@
 rootProject.name = 'chugunhaza-backend'
+
+// #99: 서비스 분리(#74) 1차 착수 — Gradle 멀티모듈 전환.
+// common은 서비스 간 공유 라이브러리(JWT 검증 등), user-server는 기존 코드 전부,
+// attendance-server/chatting-server는 이번엔 부팅 가능한 최소 스켈레톤만(#100/#101에서
+// 실제 도메인 코드 이전).
+include 'common'
+include 'user-server'
+include 'attendance-server'
+include 'chatting-server'
