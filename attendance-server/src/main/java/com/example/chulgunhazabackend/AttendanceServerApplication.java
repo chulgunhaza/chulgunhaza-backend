@@ -2,10 +2,15 @@ package com.example.chulgunhazabackend;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+import org.springframework.retry.annotation.EnableRetry;
 
-// #99/#100: 최소 부팅 스켈레톤. 실제 근태 도메인 코드는 #100에서 user-server로부터
-// 이전된다 — 지금은 actuator 헬스체크만으로 "떠 있는지"를 증명하는 상태.
+// #100: 스켈레톤에서 실제 근태 도메인 서비스로 — AttendanceRecord/Controller/
+// Service/Listener가 user-server에서 여기로 이전됐다. @EnableRetry는
+// AttendanceDeadLetterListener의 @Retryable/@Recover에 필요.
 @SpringBootApplication
+@EnableJpaAuditing
+@EnableRetry
 public class AttendanceServerApplication {
 
     public static void main(String[] args) {

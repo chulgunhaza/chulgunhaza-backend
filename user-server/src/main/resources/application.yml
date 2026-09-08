@@ -44,3 +44,16 @@ jwt:
   refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:604800} # 7일
   cookie-domain: ${JWT_COOKIE_DOMAIN:} # 비우면 요청 호스트 그대로, 운영에서 서브도메인 공유 시 .chulgunhaza.com 등으로
   cookie-secure: ${JWT_COOKIE_SECURE:false} # 로컬은 http라 false, 운영(https)에서는 true
+  # #100: 서비스별로 다른 예외 경로를 가질 수 있도록 JwtAuthenticationFilter에서
+  # 하드코딩을 빼고 여기로 옮겼다. user-server는 로그인/재발급/swagger가 예외.
+  auth:
+    exempt-path-prefixes:
+      - /v1/employee/login
+      - /v1/employee/token/refresh
+      - /swagger-ui
+      - /v3/api-docs
+
+# #100: attendance-server가 물리 분리되면서 대시보드 통계(오늘 출근 수)가
+# 더 이상 로컬 리포지토리 조회가 아니라 내부 API 호출이 됐다.
+attendance-server:
+  internal-url: ${ATTENDANCE_SERVER_INTERNAL_URL:http://localhost:8082}

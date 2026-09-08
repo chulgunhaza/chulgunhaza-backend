@@ -30,7 +30,7 @@ graph TB
         Post["Post<br/>(게시판)"]
     end
 
-    subgraph AttendanceServer["attendance-server (#100)"]
+    subgraph AttendanceServer["attendance-server (#100 완료)"]
         AttendanceRecord["AttendanceRecord<br/>(출퇴근 기록)"]
     end
 
@@ -40,7 +40,7 @@ graph TB
         EmployeeChatRoom["EmployeeChatRoom"]
     end
 
-    AttendanceRecord -.->|"employeeId (raw Long)"| Employee
+    AttendanceRecord -.->|"employeeNo (raw Long, 비정규화)"| Employee
     AnnualRecord -.->|"employeeId (raw Long)"| Employee
     EmployeeChatRoom -.->|"employeeId (raw Long)"| Employee
     ChatMessage -.->|"employeeId (raw Long)"| Employee
@@ -52,22 +52,27 @@ graph TB
 | 엔티티 | 애그리거트 | 목표 서비스 | 참조 방식 | 상태 |
 |---|---|---|---|---|
 | `Employee` (+ `Annual`, `EmployeeImage`) | Employee | user-server | 루트 | — |
-| `AttendanceRecord` | Attendance | attendance-server ([#100](https://github.com/chulgunhaza/chulgunhaza-backend/issues/100)) | `Long employeeId` | ✅ |
+| `AttendanceRecord` | Attendance | attendance-server ([#100](https://github.com/chulgunhaza/chulgunhaza-backend/issues/100) 완료) | `Long employeeNo` + `employeeName`(비정규화) | ✅ |
 | `AnnualRecord` | AnnualRecord | user-server 잔류 | `Long employeeId` | ✅ |
 | `ChatRoom` / `ChatMessage` / `EmployeeChatRoom` | Chat | chatting-server ([#101](https://github.com/chulgunhaza/chulgunhaza-backend/issues/101)) | `Long employeeId` | ✅ ([#77](https://github.com/chulgunhaza/chulgunhaza-backend/pull/77)에서 정리) |
 | `Post` | Post | user-server 잔류 | `@ManyToOne Employee` | ❌ **위반** |
+
+> **정정**: 이 표는 원래 `AttendanceRecord`도 이미 `employeeId` 참조라 문제없다고
+> 적어뒀었는데, 실제로는 `Post`와 똑같이 `@ManyToOne Employee` 객체 참조였다 —
+> [#100](https://github.com/chulgunhaza/chulgunhaza-backend/issues/100) 작업 중
+> 실제로 뜯어보다가 발견하고 바로잡았다. 이 문서만 보고 판단하지 말고 항상
+> 코드를 직접 확인할 것.
 
 ## 남은 위반: `Post.employee`
 
 `Post`는 아직 `@ManyToOne Employee` 객체 참조를 쓰고 있다
 (`domain/board/Post.java`). `Post`가 user-server에 그대로 남을 예정이라 지금 당장
 스키마 분리를 막는 건 아니지만, 나머지 전부가 지킨 규칙을 혼자 어기고 있어서
-일관성이 깨져 있다. `Chat`이 [#77](https://github.com/chulgunhaza/chulgunhaza-backend/pull/77)에서
-받은 것과 동일한 처리(`Long employeeId`로 전환 + 서비스 레이어에서
-`EmployeeRepository`를 별도 조회해 이름 등 표시용 필드 조합)를 해주는 게
-일관성 있고, 언젠가 게시판을 별도 서비스로 뺄 가능성에도 대비된다. 별도 이슈로
-분리하거나 [#99](https://github.com/chulgunhaza/chulgunhaza-backend/issues/99)(멀티모듈
-전환)에 체크박스로 끼워넣는 걸 제안한다.
+일관성이 깨져 있다. `Chat`(#77)과 `Attendance`(#100)가 받은 것과 동일한 처리
+(`Long employeeId`/`employeeNo`로 전환 + 이름 등 표시용 필드는 서비스 레이어
+조합 또는 비정규화)를 해주는 게 일관성 있고, 언젠가 게시판을 별도 서비스로
+뺄 가능성에도 대비된다. 이미 [#104](https://github.com/chulgunhaza/chulgunhaza-backend/issues/104)로
+이슈화해뒀다.
 
 ## 서비스 분리 시 "다른 애그리거트 이름 조회" 문제를 푸는 방법
 
@@ -82,3 +87,11 @@ DB가 물리적으로 나뉘면 `employeeId`만으로는 이름/부서 같은 �
 `ChatRoom`의 로컬 복제본(`ChatMember`, [#101](https://github.com/chulgunhaza/chulgunhaza-backend/issues/101))처럼
 자주 바뀌는 표시 정보를 이벤트로 동기화하는 방식도 있지만, 지금 규모에서는 과설계로
 판단해 위 두 가지로 충분한 곳부터 적용한다.
+
+**#100에서 실제로 적용한 결과**: `AttendanceRecord`는 예상대로 첫 번째 방식
+(쓰기 시점 비정규화, `employeeNo`/`employeeName`)으로 갔다. 두 번째 방식은
+원래 예상했던 "다른 애그리거트 이름 조회"가 아니라 **집계값 조회**(대시보드의
+오늘 출근 수)에도 그대로 적용됐다 — user-server가 attendance-server의
+`GET /internal/attendance/today-count`를 동기 호출하는 형태로, 이름 대신 숫자를
+가져온다는 점만 다르고 "가끔 필요한 소수 지점만 내부 API로" 원칙은 동일하다.
+자세한 내용은 [docs/attendance-server-migration.md](attendance-server-migration.md).
