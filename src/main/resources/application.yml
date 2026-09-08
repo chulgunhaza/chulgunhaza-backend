@@ -1,13 +1,4 @@
 
-server:
-  servlet:
-    session:
-      cookie:
-        name: JSESSIONID
-        max-age: 14400 # 4시간
-        http-only: true
-        # https 설정 추가 예정
-
 spring:
   datasource:
     url: ${DATABASE_URL}
@@ -27,9 +18,6 @@ spring:
       password: ${SPRING_REDIS_PASS}
       port: 6379
 
-  session:
-    store-type: redis
-
   # 파일 업로드 설정
   servlet:
     multipart:
@@ -45,3 +33,14 @@ file:
 # 운영 배포 시 CORS_ALLOWED_ORIGINS 환경변수로 실제 프론트 도메인을 지정할 것.
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+# #98: 세션(Spring Session Redis) → JWT(RS256) 전환.
+# private/public key는 PEM을 base64 한 줄로 인코딩해서 담아둔다(.env, .gitignore 대상).
+# key가 나중에 attendance/chatting-server로 분리되면 public key만 그쪽에 배포하면 된다.
+jwt:
+  private-key: ${JWT_PRIVATE_KEY}
+  public-key: ${JWT_PUBLIC_KEY}
+  access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:900} # 15분
+  refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:604800} # 7일
+  cookie-domain: ${JWT_COOKIE_DOMAIN:} # 비우면 요청 호스트 그대로, 운영에서 서브도메인 공유 시 .chulgunhaza.com 등으로
+  cookie-secure: ${JWT_COOKIE_SECURE:false} # 로컬은 http라 false, 운영(https)에서는 true

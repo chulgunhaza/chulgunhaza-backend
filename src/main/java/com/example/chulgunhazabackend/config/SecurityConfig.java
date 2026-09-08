@@ -1,7 +1,7 @@
 package com.example.chulgunhazabackend.config;
 
-import com.example.chulgunhazabackend.security.filter.SessionCheckFilter;
-import com.example.chulgunhazabackend.security.handler.LoginSuccessHandler;
+import com.example.chulgunhazabackend.security.filter.JwtAuthenticationFilter;
+import com.example.chulgunhazabackend.security.handler.JwtLogoutHandler;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,7 +30,8 @@ public class SecurityConfig {
 
     private final AuthenticationSuccessHandler authenticationSuccessHandler;
     private final AuthenticationFailureHandler authenticationFailureHandler;
-    private final SessionCheckFilter sessionCheckFilter;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtLogoutHandler jwtLogoutHandler;
     private final AccessDeniedHandler accessDeniedHandler;
     private final UserDetailsService userDetailsService;
 
@@ -94,8 +95,7 @@ public class SecurityConfig {
                     response.getWriter().write("로그아웃 성공");
                     response.getWriter().flush();
                 });
-                httpSecurityLogoutConfigurer.invalidateHttpSession(true);
-                httpSecurityLogoutConfigurer.deleteCookies("JSESSIONID");
+                httpSecurityLogoutConfigurer.addLogoutHandler(jwtLogoutHandler);
             }
         );
 
@@ -107,8 +107,8 @@ public class SecurityConfig {
         );
 
 
-        // 필터 위치 지정 
-        httpSecurity.addFilterBefore(sessionCheckFilter, UsernamePasswordAuthenticationFilter.class);
+        // 필터 위치 지정
+        httpSecurity.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         // daoAuthenticationProvider 지정
         httpSecurity.authenticationProvider(daoAuthenticationProvider());

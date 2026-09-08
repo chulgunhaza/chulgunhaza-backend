@@ -33,9 +33,13 @@ dependencies {
     // spring-security
     implementation 'org.springframework.boot:spring-boot-starter-security'
 
-    // redis
-    implementation 'org.springframework.session:spring-session-data-redis'
+    // redis (#98: 세션 스토어로는 더 이상 안 쓰고, refresh 토큰 저장용 RedisTemplate만 사용)
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // JWT (#98: 세션 인증 → RS256 JWT 전환)
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 
     // rabbitMQ
     implementation 'org.springframework.boot:spring-boot-starter-amqp'

@@ -20,6 +20,12 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     @Query("SELECT e FROM Employee e WHERE e.email = :email")
     Optional<Employee> findEmployeeByEmailWithUserRoleList(@Param("email") String email);
 
+    // #98: refresh 토큰 재발급 시 최신 role/부서를 다시 조회하기 위해 필요
+    // (refresh 토큰 자체엔 email이 없고 id(subject)만 있어서 email 버전 대신 이걸 씀).
+    @EntityGraph(attributePaths = {"userRoleList"})
+    @Query("SELECT e FROM Employee e WHERE e.id = :id")
+    Optional<Employee> findEmployeeByIdWithUserRoleList(@Param("id") Long id);
+
     Optional<Employee> findEmployeeById(Long id);
 
     Optional<Employee> findEmployeeByEmployeeNo(Long employeeNo);
