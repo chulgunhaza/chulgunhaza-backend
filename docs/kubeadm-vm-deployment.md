@@ -112,6 +112,28 @@ Mac에서 `ssh chulgunhaza-vm`이 비밀번호 없이 붙으면 완료.
 
 ### 2. VM 쪽 최초 1회 준비
 
+**메모리 4GB 미만이면 스왑부터 만들어라 — 필수, 선택 아님.** 이 클러스터
+(kubeadm 컨트롤플레인 전체: etcd/kube-apiserver/kubelet/coredns 등) +
+MySQL/Redis/RabbitMQ + 앱 파드 3개가 이미 떠 있는 상태에서 `podman build
+--no-cache`로 Gradle 멀티모듈 3개를 새로 빌드하면 순간적으로 메모리를
+크게 잡아먹는다 — 실측(RAM 3.5GB, 스왑 0B인 VM)으로 `free -h`가 64Mi
+남기고 꽉 차서 `kswapd0`가 CPU를 갈아넣고 load average가 **180**까지
+치솟는 걸 확인했다. 스왑이 없으면 이 상태에서 OOM killer가 무작위로
+프로세스를 죽이기 시작할 수 있고, 하필 etcd나 kube-apiserver가 죽으면
+클러스터 자체가 망가진다. 4GB 스왑 추가 후 같은 배포가 문제없이(load
+average 한 자릿수로) 끝나는 것까지 확인했다.
+
+```bash
+# VM 안에서 — 스왑이 이미 있는지 확인
+free -h
+# Swap 줄이 0B면 아래로 4GB 스왑 파일 추가(재부팅해도 유지되게 fstab 등록)
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
 ```bash
 # VM 안에서 (배포판에 맞게 — 예: Rocky/RHEL 계열은 dnf, Ubuntu/Debian은 apt)
 dnf install -y git podman   # 또는: sudo apt install -y git podman
@@ -263,6 +285,8 @@ rm -rf /tmp/verify.env.k8s /tmp/kind-config.yaml
 | RabbitMQ 연결 실패 | `SPRING_RABBITMQ_HOST=rabbitmq`가 `.env.k8s`에 있는지, `app-env` Secret이 최신인지(`kubectl get secret app-env -o yaml`) 확인 |
 | `sudo: a password is required` 로 스크립트가 멈춤 | sudoers 설정을 안 함 — 스크립트가 원격 스크립트 본문을 SSH 표준입력으로 흘려보내는 구조라 sudo 비밀번호 프롬프트에 답할 방법이 없음(필수 설정, 선택 아님) |
 | 로그인은 되는데 채팅방 생성이 503 | chatting-server → user-server 내부 API(`USER_SERVER_INTERNAL_URL=http://user-server:8081`) 실패 — user-server 파드가 떠 있는지, Service명이 `user-server`가 맞는지 확인 |
+| `up` 실행 중 SSH가 자꾸 끊기거나 응답이 없음, `uptime`의 load average가 수십~수백 | VM 메모리 부족 — "2. VM 쪽 최초 1회 준비"의 스왑 설정을 안 했을 가능성이 큼. `free -h`로 `Swap` 줄이 `0B`인지 확인하고 스왑부터 추가할 것(스왑 없이 RAM이 꽉 차면 OOM killer가 etcd/kube-apiserver를 죽여서 클러스터가 망가질 수 있음) |
+| 재배포했는데 화면/동작이 그대로(옛 버전) | ~~예전엔 이미지 태그를 백엔드 레포 git sha 하나로만 매겼어서, 프론트만 바뀌고 백엔드가 안 바뀌면 태그가 그대로라 `kubectl set image`가 무변경으로 판단해 롤아웃 자체가 안 걸렸다~~ — 타임스탬프 태그로 고쳐져서 지금은 매번 새 태그가 나온다. 그래도 재현되면 `kubectl get deployment <서비스> -o jsonpath='{.spec.template.spec.containers[0].image}'`로 실제 적용된 태그를 확인 |
 
 ## 범위 밖
 

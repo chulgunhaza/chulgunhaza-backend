@@ -30,6 +30,13 @@
 #      (레포/프론트 레포는 최초 1회만 수동 clone 필요 — 이후엔 이 스크립트가
 #      알아서 pull한다. .env.k8s는 git에 안 올라가므로 최초 1회는 반드시
 #      VM에서 직접 채워야 함)
+#   4. VM 메모리가 4GB 미만이면 스왑 필수 — k8s 컨트롤플레인 + 앱 스택이 이미
+#      떠 있는 상태에서 podman build --no-cache로 Gradle 멀티모듈 3개를 새로
+#      빌드하면 순간적으로 메모리를 크게 잡아먹는다. 실측(RAM 3.5GB, 스왑
+#      0B)으로 메모리가 꽉 차서 load average가 180까지 치솟는 것과, 스왑 없이
+#      두면 OOM killer가 etcd/kube-apiserver를 죽여서 클러스터가 망가질 수
+#      있는 것까지 확인했다. 스왑 설정 절차는 docs/kubeadm-vm-deployment.md
+#      2번 항목 참고.
 #
 # ===== 아래 두 값만 본인 환경에 맞게 채우면 됨 =====
 VM_HOST="user@vm-ip-or-hostname"   # ssh 접속 정보 (예: ubuntu@192.168.64.5)
