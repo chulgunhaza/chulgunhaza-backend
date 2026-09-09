@@ -6,13 +6,21 @@
 # 실제 빌드/배포 로직은 전부 SSH로 VM 안에 들어가서 실행한다(git pull →
 # podman build → containerd import → kubectl apply).
 #
-# ===== 사전 준비 (최초 1회, VM 안에서) =====
-#   1. git, podman, kubectl이 설치돼 있고 kubectl이 이 kubeadm 클러스터를
-#      가리키고 있어야 함(대부분 컨트롤플레인 노드에 기본으로 준비돼 있음)
+# ===== 사전 준비 (최초 1회) =====
+#   0. Mac ↔ VM SSH 키 기반 인증 필수 — 이 스크립트가 원격 스크립트 본문을
+#      SSH 표준입력(heredoc)으로 흘려보내는 구조라 비밀번호 프롬프트에 답할
+#      방법이 없다. ssh-keygen으로 키를 만들어 VM의 ~/.ssh/authorized_keys에
+#      등록해두고 `ssh <VM_HOST>`가 비밀번호 없이 붙는지 먼저 확인할 것
+#      (자세한 절차는 docs/kubeadm-vm-deployment.md 1번 항목).
+#   1. VM 안에 git, podman, kubectl이 설치돼 있고 kubectl이 이 kubeadm
+#      클러스터를 가리키고 있어야 함(예: dnf install -y git podman — Rocky/RHEL
+#      계열, apt install -y git podman — Ubuntu/Debian 계열. kubectl/kubeadm은
+#      이미 클러스터가 떠 있다는 전제라 보통 이미 있음)
 #   2. `sudo ctr`를 비밀번호 없이 쓸 수 있어야 함(containerd에 이미지 import할
-#      때 필요) — 이 스크립트는 원격 스크립트 본문을 SSH의 표준입력(heredoc)으로
-#      흘려보내기 때문에, sudo가 비밀번호를 물어봐도 그 프롬프트에 입력할 방법이
-#      없다(표준입력이 이미 스크립트 내용으로 채워져 있음). 즉 필수 사전 설정:
+#      때 필요) — 0번과 같은 이유(표준입력이 이미 스크립트 내용으로 채워져
+#      있어서 sudo 비밀번호 프롬프트에 입력 불가). VM에 root로 접속한다면 이미
+#      비번 없이 되므로(sudo -n true로 확인) 이 단계는 필요 없다. root가
+#      아니면 필수:
 #        echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/ctr" | sudo tee /etc/sudoers.d/ctr-nopasswd
 #   3. chulgunhaza-backend 레포를 받아서 k8s/.env.k8s.example을
 #      .env.k8s로 복사하고 실제 값(DB/JWT/RabbitMQ 등)을 채워야 함:
