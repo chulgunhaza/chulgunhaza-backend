@@ -1,0 +1,35 @@
+# #98의 refresh 토큰 저장 + #101의 chat presence/fanout 둘 다 이 Redis 하나를
+# 같이 쓴다(키 프리픽스로 구분 — 로컬 개발과 동일). REDIS_PASSWORD는 로컬
+# docker 셋업과 동일하게 plain redis 이미지가 실제로 강제하진 않지만(세션 중
+# 확인된 기존 동작), 앱 쪽 SPRING_REDIS_PASS 값과 형식을 맞추기 위해 그대로
+# 전달만 해둔다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:latest
+          ports:
+            - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379

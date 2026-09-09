@@ -1,0 +1,40 @@
+# user-server.yaml과 동일 패턴. RabbitMQ host는 application.yml에
+# `host: localhost`로 리터럴 하드코딩돼 있지만, Spring의 프로퍼티 우선순위는
+# OS 환경변수(SPRING_RABBITMQ_HOST, app-env Secret에서 주입)가 application.yml보다
+# 높아서 코드 변경 없이 그대로 오버라이드된다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: attendance-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: attendance-server
+  template:
+    metadata:
+      labels:
+        app: attendance-server
+    spec:
+      containers:
+        - name: attendance-server
+          image: localhost/attendance-server:dev
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8082
+          envFrom:
+            - secretRef:
+                name: app-env
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: attendance-server
+spec:
+  type: NodePort
+  selector:
+    app: attendance-server
+  ports:
+    - port: 8082
+      targetPort: 8082
+      nodePort: 30082

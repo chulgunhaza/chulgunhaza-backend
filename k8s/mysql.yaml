@@ -1,0 +1,82 @@
+# #101 이후 확립된 3-스키마 구조(chulgunhaza_user/attendance/chatting)를
+# 그대로 옮긴다. 초기화 스크립트는 새로 안 만들고 기존
+# docs/sql/create-schemas.sql을 ConfigMap으로 그대로 마운트한다 — mysql 공식
+# 이미지가 /docker-entrypoint-initdb.d/*.sql을 최초 기동(빈 데이터 볼륨) 때
+# 자동 실행해준다.
+#
+# 단일 노드 클러스터라 hostPath로 데이터를 노드 로컬 디스크에 남긴다(재배포/
+# 파드 재시작에도 데이터 유지 — PVC/StorageClass 설정 없이 가장 간단한 방법).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init
+data:
+  create-schemas.sql: |
+    CREATE DATABASE IF NOT EXISTS chulgunhaza_user
+        CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE DATABASE IF NOT EXISTS chulgunhaza_attendance
+        CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE DATABASE IF NOT EXISTS chulgunhaza_chatting
+        CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    GRANT ALL PRIVILEGES ON chulgunhaza_user.* TO 'chulgunhaza'@'%';
+    GRANT ALL PRIVILEGES ON chulgunhaza_attendance.* TO 'chulgunhaza'@'%';
+    GRANT ALL PRIVILEGES ON chulgunhaza_chatting.* TO 'chulgunhaza'@'%';
+    FLUSH PRIVILEGES;
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # hostPath 볼륨은 동시에 두 파드가 못 씀 — 롤링 대신 재생성
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8
+          ports:
+            - containerPort: 3306
+          env:
+            - name: MYSQL_DATABASE
+              value: chulgunhaza_user
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef: { name: app-env, key: DATABASE_USER }
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: app-env, key: DATABASE_PASSWORD }
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: app-env, key: MYSQL_ROOT_PASSWORD }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: init-script
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: data
+          hostPath:
+            path: /var/lib/chulgunhaza/mysql-data
+            type: DirectoryOrCreate
+        - name: init-script
+          configMap:
+            name: mysql-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+spec:
+  selector:
+    app: mysql
+  ports:
+    - port: 3306
+      targetPort: 3306

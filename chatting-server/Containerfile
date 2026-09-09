@@ -1,0 +1,15 @@
+# k8s(scripts/vm-deploy.sh) 배포용. user-server/Containerfile과 동일 패턴 —
+# 빌드 컨텍스트는 레포 루트(멀티모듈이라 common이 같이 필요).
+#   podman build -f chatting-server/Containerfile -t localhost/chatting-server:<tag> .
+FROM eclipse-temurin:17-jdk-alpine AS build
+WORKDIR /workspace
+
+COPY . .
+RUN chmod +x gradlew && ./gradlew :chatting-server:bootJar --no-daemon -x test
+
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+COPY --from=build /workspace/chatting-server/build/libs/*.jar app.jar
+
+EXPOSE 8083
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

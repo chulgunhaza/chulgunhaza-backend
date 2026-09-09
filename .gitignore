@@ -38,6 +38,7 @@ out/
 
 ### Local dev secrets/config (do not commit) ###
 .env
+.env.k8s
 gradle.properties
 uploads/
 
