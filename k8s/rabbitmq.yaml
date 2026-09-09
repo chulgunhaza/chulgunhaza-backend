@@ -1,0 +1,45 @@
+# 계정은 app-env Secret의 SPRING_RABBITMQ_USERNAME/PASSWORD를 그대로 재사용
+# (RabbitMQ 이미지가 기대하는 키 이름(RABBITMQ_DEFAULT_USER/PASS)으로 매핑만
+# 해준다) — 컨테이너 계정과 앱이 접속하는 계정이 항상 같은 값이 되도록.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:management
+          ports:
+            - containerPort: 5672
+            - containerPort: 15672
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef: { name: app-env, key: SPRING_RABBITMQ_USERNAME }
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef: { name: app-env, key: SPRING_RABBITMQ_PASSWORD }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+spec:
+  selector:
+    app: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+    - name: management
+      port: 15672
+      targetPort: 15672

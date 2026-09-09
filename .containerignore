@@ -1,0 +1,12 @@
+# vm-deploy.sh가 레포 루트를 빌드 컨텍스트로 쓰는 3개 서비스 Containerfile
+# (user-server/attendance-server/chatting-server) 공용. .gitignore와 대체로
+# 같은 목록이되, .env는 컨테이너 안에서 안 쓰므로(런타임 env는 k8s Secret으로
+# 주입) 여기서도 제외한다 — 실수로 이미지 레이어에 비밀값이 구워지는 걸 방지.
+.git
+.gradle
+build/
+**/build/
+uploads/
+logs/
+.env
+.DS_Store

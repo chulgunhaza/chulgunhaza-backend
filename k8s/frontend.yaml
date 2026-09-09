@@ -1,0 +1,36 @@
+# 프론트는 정적 파일(nginx)이라 런타임 env가 필요 없다 — VITE_* 값은 이미
+# 빌드 타임에 dist/에 구워져 있다(chulgunhaza-frontend/Containerfile,
+# vm-deploy.sh의 podman build --build-arg 참고).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: localhost/frontend:dev
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  type: NodePort
+  selector:
+    app: frontend
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30080

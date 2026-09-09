@@ -1,0 +1,19 @@
+# k8s(scripts/vm-deploy.sh) 배포용. 빌드 컨텍스트는 레포 루트여야 한다 —
+# 멀티모듈이라 settings.gradle/build.gradle(루트)과 common 모듈이 같이 필요.
+#   podman build -f user-server/Containerfile -t localhost/user-server:<tag> .
+#
+# 런타임 설정(DB/Redis/RabbitMQ 접속 정보, 서비스 간 내부 API URL, JWT 키 등)은
+# 전부 환경변수로 주입한다 — 이미지 자체에는 아무 비밀값도 안 들어간다
+# (k8s Secret으로 주입, k8s/user-server.yaml 참고).
+FROM eclipse-temurin:17-jdk-alpine AS build
+WORKDIR /workspace
+
+COPY . .
+RUN chmod +x gradlew && ./gradlew :user-server:bootJar --no-daemon -x test
+
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+COPY --from=build /workspace/user-server/build/libs/*.jar app.jar
+
+EXPOSE 8081
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

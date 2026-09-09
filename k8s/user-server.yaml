@@ -1,0 +1,46 @@
+# 이미지 태그(:dev)는 자리표시자다 — vm-deploy.sh가 매 배포마다
+# `kubectl set image`로 실제 git short-sha 태그로 덮어쓴다. imagePullPolicy:
+# Never는 레지스트리 없이 containerd에 직접 import한 이미지만 쓴다는 뜻(로컬에
+# 없으면 풀 시도 자체를 안 하고 바로 실패 — 정상 동작).
+#
+# envFrom으로 app-env Secret 전체를 주입한다 — DATABASE_URL/JWT_*/
+# SPRING_REDIS_*/SPRING_RABBITMQ_*/CORS_ALLOWED_ORIGINS/UPLOAD_DIR/
+# ATTENDANCE_SERVER_INTERNAL_URL 전부 이미 애플리케이션이 기대하는 정확한
+# 이름으로 .env.k8s에 들어있어서 별도 매핑이 필요 없다
+# (docs/kubeadm-vm-deployment.md 참고).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-server
+  template:
+    metadata:
+      labels:
+        app: user-server
+    spec:
+      containers:
+        - name: user-server
+          image: localhost/user-server:dev
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8081
+          envFrom:
+            - secretRef:
+                name: app-env
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-server
+spec:
+  type: NodePort
+  selector:
+    app: user-server
+  ports:
+    - port: 8081
+      targetPort: 8081
+      nodePort: 30081

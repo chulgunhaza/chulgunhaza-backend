@@ -1,0 +1,39 @@
+# user-server.yaml과 동일 패턴. replicas를 2 이상으로 올려도(#101에서 실측
+# 검증한 Redis Pub/Sub 팬아웃 덕분에) 그대로 동작한다 — 다중 인스턴스 동작을
+# k8s에서도 확인해보고 싶으면 replicas만 바꾸면 됨.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatting-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chatting-server
+  template:
+    metadata:
+      labels:
+        app: chatting-server
+    spec:
+      containers:
+        - name: chatting-server
+          image: localhost/chatting-server:dev
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8083
+          envFrom:
+            - secretRef:
+                name: app-env
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatting-server
+spec:
+  type: NodePort
+  selector:
+    app: chatting-server
+  ports:
+    - port: 8083
+      targetPort: 8083
+      nodePort: 30083
