@@ -78,21 +78,49 @@ containerd 로컬 이미지 저장소에 바로 넣는 방식으로 간다. 클�
 | `k8s/user-server.yaml` / `k8s/attendance-server.yaml` / `k8s/chatting-server.yaml` | 각 서비스 Deployment+NodePort Service (30081/30082/30083) |
 | `k8s/frontend.yaml` | 프론트 Deployment+NodePort Service (30080) |
 | `k8s/.env.k8s.example` | VM에서 `.env.k8s`로 복사해서 채우는 템플릿 |
-| `{user,attendance,chatting}-server/Containerfile` | 멀티스테이지(`eclipse-temurin:17-jdk-alpine` 빌드 → `17-jre-alpine` 런타임), 빌드 컨텍스트는 레포 루트(멀티모듈이라 `common` 필요) |
+| `{user,attendance,chatting}-server/Containerfile` | 멀티스테이지(`eclipse-temurin:17-jdk` 빌드 → `17-jre` 런타임 — amd64/arm64 멀티아키 태그, alpine 변형은 arm64 미지원이라 안 씀), 빌드 컨텍스트는 레포 루트(멀티모듈이라 `common` 필요) |
 | `chulgunhaza-frontend/Containerfile` | 멀티스테이지(`node:20-alpine` 빌드 → `nginx:alpine` 서빙), React Router SPA 폴백은 `nginx.conf` |
 | `scripts/vm-deploy.sh` | Mac에서 실행하는 SSH 래퍼. `up`/`down`/`logs <service>`/`restart` |
 
 ## 실행 절차
 
-### 1. VM 쪽 최초 1회 준비
+### 1. Mac ↔ VM SSH 키 설정 (최초 1회)
+
+`vm-deploy.sh`는 SSH로 원격 스크립트 본문을 표준입력(heredoc)으로 흘려보내는
+구조라, 비밀번호 프롬프트에 답할 방법이 없다 — **키 기반 인증이 필수**다.
 
 ```bash
-# VM 안에서
-sudo apt install -y git podman   # kubectl/kubeadm은 이미 있다고 가정
+# Mac에서
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_chulgunhaza_vm -N "" -C "vm-deploy@chulgunhaza"
+cat ~/.ssh/id_ed25519_chulgunhaza_vm.pub   # 아래에서 VM에 등록할 값
 
-# ctr import에 sudo 비밀번호를 못 물어보므로(스크립트가 SSH stdin을 스크립트
-# 전달용으로 이미 쓰고 있어서) 필수:
+cat >> ~/.ssh/config <<'EOF'
+
+Host chulgunhaza-vm
+    HostName <VM_IP>
+    User <VM_USER>
+    IdentityFile ~/.ssh/id_ed25519_chulgunhaza_vm
+EOF
+```
+
+```bash
+# VM에서(콘솔 또는 비밀번호로 최초 1회 로그인해서)
+echo "<위에서 출력된 공개키(ssh-ed25519 AAAA... 전체)>" >> ~/.ssh/authorized_keys
+```
+
+Mac에서 `ssh chulgunhaza-vm`이 비밀번호 없이 붙으면 완료.
+
+### 2. VM 쪽 최초 1회 준비
+
+```bash
+# VM 안에서 (배포판에 맞게 — 예: Rocky/RHEL 계열은 dnf, Ubuntu/Debian은 apt)
+dnf install -y git podman   # 또는: sudo apt install -y git podman
+# kubectl/kubeadm은 이미 클러스터가 떠 있다는 전제라 보통 이미 있음
+
+# SSH 접속 유저가 root가 아니면, ctr import에 sudo 비밀번호를 못 물어보므로
+# (스크립트가 SSH stdin을 스크립트 전달용으로 이미 쓰고 있어서) 필수:
 echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/ctr" | sudo tee /etc/sudoers.d/ctr-nopasswd
+# (root로 접속한다면 이 단계는 필요 없음 — sudo -n true로 미리 확인 가능)
 
 git clone https://github.com/chulgunhaza/chulgunhaza-backend.git
 cd chulgunhaza-backend
@@ -100,16 +128,16 @@ cp k8s/.env.k8s.example .env.k8s
 vim .env.k8s   # DB/JWT/RabbitMQ 비밀번호, <VM_IP>를 이 VM의 실제 IP로 채우기
 ```
 
-### 2. Mac 쪽 스크립트 설정
+### 3. Mac 쪽 스크립트 설정
 
 `scripts/vm-deploy.sh` 상단의 두 줄만 채운다:
 
 ```bash
-VM_HOST="ubuntu@192.168.64.5"   # 본인 SSH 접속 정보로
-VM_IP="192.168.64.5"            # 보통 VM_HOST와 같은 호스트
+VM_HOST="chulgunhaza-vm"       # 1번에서 등록한 ssh config alias(또는 user@ip)
+VM_IP="192.168.64.5"           # 브라우저가 NodePort로 접속할 IP
 ```
 
-### 3. 배포
+### 4. 배포
 
 ```bash
 ./scripts/vm-deploy.sh up
@@ -120,12 +148,12 @@ VM_IP="192.168.64.5"            # 보통 VM_HOST와 같은 호스트
 `kubectl set image`로 방금 빌드한 태그로 갱신 → 롤아웃 대기. 끝나면 접속 URL
 요약이 출력된다.
 
-### 4. 확인
+### 5. 확인
 
 `http://<VM_IP>:30080`에서 `test@chulgunhaza.com` / `test1234!`로 로그인해서
 대시보드/출근 등록/채팅(실시간 메시지 포함)까지 확인한다.
 
-### 5. 재배포 / 로그 / 종료
+### 6. 재배포 / 로그 / 종료
 
 ```bash
 # 코드 수정 → git push 한 뒤
@@ -166,23 +194,16 @@ EOF
 kind create cluster --name chulgunhaza-verify --config /tmp/kind-config.yaml
 ```
 
-**Apple Silicon Mac이면 베이스 이미지를 임시로 바꿔야 한다** —
-`eclipse-temurin:17-jdk-alpine`/`17-jre-alpine`은 amd64 전용(arm64 매니페스트
-없음)이라 그대로 빌드하면 `no match for platform in manifest`로 실패한다.
-실제 VM은 보통 x86_64라 운영 파일(`Containerfile` 원본)은 그대로 두고, 로컬
-검증용으로만 알파인이 아닌 멀티아키(`17-jdk`/`17-jre`, Debian 기반) 태그로
-바꾼 임시 사본을 만들어서 쓴다:
+`Containerfile`들은 `eclipse-temurin:17-jdk`/`17-jre`(멀티아키: amd64+arm64)를
+쓰므로 Apple Silicon Mac에서도, arm64 VM에서도 그대로 빌드된다 — 원래
+alpine 변형(`17-jdk-alpine`/`17-jre-alpine`)은 amd64 전용이라 arm64에서
+`no match for platform in manifest`로 실패해서 멀티아키 태그로 바꿨다(실측
+확인, 트러블슈팅 표 참고).
 
 ```bash
-mkdir -p /tmp/verify-containerfiles
-for svc in user-server attendance-server chatting-server; do
-  sed 's/eclipse-temurin:17-jdk-alpine/eclipse-temurin:17-jdk/; s/eclipse-temurin:17-jre-alpine/eclipse-temurin:17-jre/' \
-    "$svc/Containerfile" > "/tmp/verify-containerfiles/$svc.Containerfile"
-done
-
 GIT_SHA=verify$(date +%s)
 for svc in user-server attendance-server chatting-server; do
-  docker build -f /tmp/verify-containerfiles/$svc.Containerfile -t localhost/$svc:$GIT_SHA .
+  docker build -f $svc/Containerfile -t localhost/$svc:$GIT_SHA .
 done
 
 cd ../chulgunhaza-frontend
@@ -228,7 +249,7 @@ RabbitMQ가 뜨기 전에 3개 Spring 서비스 파드가 `Error`로 한두 번 
 kind delete cluster --name chulgunhaza-verify
 docker rmi localhost/user-server:$GIT_SHA localhost/attendance-server:$GIT_SHA \
   localhost/chatting-server:$GIT_SHA localhost/frontend:$GIT_SHA
-rm -rf /tmp/verify-containerfiles /tmp/verify.env.k8s /tmp/kind-config.yaml
+rm -rf /tmp/verify.env.k8s /tmp/kind-config.yaml
 ```
 
 ## 트러블슈팅
@@ -237,7 +258,8 @@ rm -rf /tmp/verify-containerfiles /tmp/verify.env.k8s /tmp/kind-config.yaml
 |---|---|
 | `ErrImageNeverPull` | 이미지가 containerd `k8s.io` 네임스페이스에 없음 — `sudo ctr -n k8s.io images import`가 실패했는지 스크립트 출력 확인. sudoers 설정 빠졌을 가능성 큼 |
 | Spring 서비스 파드가 처음에 `Error`/`CrashLoopBackOff` | MySQL/Redis/RabbitMQ가 아직 준비되기 전이라 정상 — `kubectl get pods`로 몇 초 뒤 재확인(자동 재시작됨) |
-| `no match for platform in manifest`(Mac에서 로컬 빌드 시) | `eclipse-temurin:*-alpine`이 amd64 전용이라 arm64 Mac에서 못 씀 — 위 kind 검증 절차처럼 로컬 검증용으로만 비-알파인 태그로 바꿔서 빌드(실제 VM은 보통 amd64라 원본 그대로 문제없음) |
+| `no match for platform in manifest` | `eclipse-temurin:*-alpine`은 amd64 전용이라 arm64(Apple Silicon Mac, arm64 VM 등)에서 못 씀 — `Containerfile`이 이미 멀티아키 태그(`17-jdk`/`17-jre`)를 쓰므로 정상이면 안 나야 함. 나온다면 레포가 최신인지(`git pull`) 확인 |
+| VM/SSH 관련 명령이 전부 `Permission denied` | 키 기반 인증이 안 돼 있음 — "1. Mac ↔ VM SSH 키 설정" 단계부터 다시 확인. 비밀번호 인증만으로는 `vm-deploy.sh`가 원격 스크립트를 SSH 표준입력으로 흘려보내는 구조라 동작하지 않는다 |
 | RabbitMQ 연결 실패 | `SPRING_RABBITMQ_HOST=rabbitmq`가 `.env.k8s`에 있는지, `app-env` Secret이 최신인지(`kubectl get secret app-env -o yaml`) 확인 |
 | `sudo: a password is required` 로 스크립트가 멈춤 | sudoers 설정을 안 함 — 스크립트가 원격 스크립트 본문을 SSH 표준입력으로 흘려보내는 구조라 sudo 비밀번호 프롬프트에 답할 방법이 없음(필수 설정, 선택 아님) |
 | 로그인은 되는데 채팅방 생성이 503 | chatting-server → user-server 내부 API(`USER_SERVER_INTERNAL_URL=http://user-server:8081`) 실패 — user-server 파드가 떠 있는지, Service명이 `user-server`가 맞는지 확인 |

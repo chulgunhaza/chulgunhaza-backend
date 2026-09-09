@@ -1,13 +1,14 @@
 # k8s(scripts/vm-deploy.sh) 배포용. user-server/Containerfile과 동일 패턴 —
-# 빌드 컨텍스트는 레포 루트(멀티모듈이라 common이 같이 필요).
+# 빌드 컨텍스트는 레포 루트(멀티모듈이라 common이 같이 필요). alpine 태그는
+# amd64 전용이라 arm64 VM에서 안 됨(실측 확인) — 멀티아키 태그를 쓴다.
 #   podman build -f chatting-server/Containerfile -t localhost/chatting-server:<tag> .
-FROM eclipse-temurin:17-jdk-alpine AS build
+FROM eclipse-temurin:17-jdk AS build
 WORKDIR /workspace
 
 COPY . .
 RUN chmod +x gradlew && ./gradlew :chatting-server:bootJar --no-daemon -x test
 
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /workspace/chatting-server/build/libs/*.jar app.jar
 
