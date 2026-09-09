@@ -58,6 +58,14 @@ jobs:
       # additional schemas" 스텝에서 따로 만든다(로컬 .env의 CHATTING_DATABASE_URL과
       # 동일한 계약).
       CHATTING_DATABASE_URL: jdbc:mysql://127.0.0.1:3306/chulgunhaza_chatting?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
+      # #101: chatting-server/attendance-server는 (컨테이너 이름 충돌을 피하려고
+      # #100에서) spring-boot-docker-compose 대신 명시적 RMQ_USER/RMQ_PASS로 접속한다.
+      # user-server는 이 설정이 아예 없어서(스프링 기본값 guest/guest 그대로) 지금까지
+      # CI에서 안 드러났는데, chatting-server의 @SpringBootTest가 실제로 RabbitMQ
+      # 커넥션을 맺으면서 처음 노출됐다 — 아래 rabbitmq 서비스 컨테이너도 env 지정이
+      # 없어 기본 계정(guest/guest)이라 그대로 맞춘다.
+      RMQ_USER: guest
+      RMQ_PASS: guest
       SPRING_REDIS_HOST: 127.0.0.1
       SPRING_REDIS_PASS: ""
       UPLOAD_DIR: ./uploads
