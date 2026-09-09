@@ -1,4 +1,12 @@
 
+# #101: 명시적으로 8081을 고정한다 — attendance-server(:8082)/chatting-server(:8083)가
+# 이 서비스를 부를 때 쓰는 내부 API 기본값(user-server.internal-url 등)이 전부 8081을
+# 전제하는데, 여기 server.port 지정이 없어서 실제로는 Spring 기본값인 8080으로
+# 떠 있었다 — chatting-server를 로컬에서 띄우고 서비스 간 호출을 실측하다가 발견
+# (EmployeeDirectoryClient가 8081로 호출하는데 아무도 안 듣고 있어서 커넥션 실패).
+server:
+  port: 8081
+
 spring:
   datasource:
     url: ${DATABASE_URL}
@@ -45,13 +53,15 @@ jwt:
   cookie-domain: ${JWT_COOKIE_DOMAIN:} # 비우면 요청 호스트 그대로, 운영에서 서브도메인 공유 시 .chulgunhaza.com 등으로
   cookie-secure: ${JWT_COOKIE_SECURE:false} # 로컬은 http라 false, 운영(https)에서는 true
   # #100: 서비스별로 다른 예외 경로를 가질 수 있도록 JwtAuthenticationFilter에서
-  # 하드코딩을 빼고 여기로 옮겼다. user-server는 로그인/재발급/swagger가 예외.
+  # 하드코딩을 빼고 여기로 옮겼다. user-server는 로그인/재발급/swagger, 그리고
+  # #101부터는 다른 서비스가 호출하는 /internal(예: /internal/employees)이 예외.
   auth:
     exempt-path-prefixes:
       - /v1/employee/login
       - /v1/employee/token/refresh
       - /swagger-ui
       - /v3/api-docs
+      - /internal
 
 # #100: attendance-server가 물리 분리되면서 대시보드 통계(오늘 출근 수)가
 # 더 이상 로컬 리포지토리 조회가 아니라 내부 API 호출이 됐다.
