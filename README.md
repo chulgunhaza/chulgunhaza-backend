@@ -204,15 +204,29 @@ graph TB
 ### 모니터링 (현재 미구현)
 `build.gradle` 에 actuator/micrometer/prometheus 관련 의존성이 전혀 없어서, RabbitMQ 관리 UI(`:15672`)가 사실상 유일한 모니터링 창구입니다. `spring-boot-starter-actuator` + Micrometer(Prometheus registry) + Prometheus + Grafana 를 추가하면 API 응답시간, RabbitMQ 큐 적재량, DB 커넥션풀 등을 시각화할 수 있습니다. 아래 "AOP 로그 추적" 이슈와 로그 수집(Loki/ELK)을 함께 엮으면 관측 스택이 완결됩니다.
 
-### Docker & Kubernetes 배포 (현재 미구현)
-저장소에 `Dockerfile`/K8s manifest가 전혀 없고, `compose.yaml`은 로컬 개발용 redis/rabbitmq만 담당합니다. 제안하는 흐름은 다음과 같습니다.
-
-- 멀티스테이지 `Dockerfile`(gradle build → JRE 런타임 이미지) → Container Registry(ECR/DockerHub)
-- K8s `Deployment`(App Pod) + `Service` + `Ingress`, 환경변수는 `ConfigMap`/`Secret` 으로 주입
-- 트래픽 대응을 위한 `HPA`(Horizontal Pod Autoscaler)
-- 운영 환경에서는 MySQL/Redis/RabbitMQ를 컨테이너 대신 RDS / ElastiCache / Amazon MQ 같은 관리형 서비스로 옮기는 것을 권장 (특히 **파일 업로드 S3 마이그레이션이 K8s 멀티 Pod 배포보다 반드시 선행**되어야 합니다 — 로컬 디스크 저장인 채로 여러 Pod를 띄우면 Pod마다 파일이 따로 저장되어 조회가 깨집니다)
+### Docker & Kubernetes 배포
+`k8s/` 디렉터리에 실제 매니페스트, `{user,attendance,chatting}-server/Containerfile` +
+`chulgunhaza-frontend/Containerfile`, `scripts/vm-deploy.sh`로 이미 구현·실측
+검증까지 끝났습니다 — 설계 근거와 절차는 [docs/kubeadm-vm-deployment.md](docs/kubeadm-vm-deployment.md)
+참고. CI에서 이 Containerfile들로 이미지를 빌드해 자동 배포하는 CD 파이프라인은
+진행 중입니다(아래 진행 상황 참고).
 
 ## 진행 상황
+
+```mermaid
+flowchart LR
+    classDef done fill:#d4edda,stroke:#28a745,color:#155724
+    classDef progress fill:#fff3cd,stroke:#ffc107,color:#856404
+    classDef todo fill:#f1f1f1,stroke:#adb5bd,color:#495057
+
+    A["#98<br/>JWT(RS256) 전환"]:::done --> B["#99<br/>Gradle 멀티모듈 +<br/>스키마 분리"]:::done
+    B --> C["#100<br/>attendance-server<br/>물리 분리"]:::done
+    C --> D["#101<br/>chatting-server 분리 +<br/>Redis Pub/Sub 팬아웃"]:::done
+    D --> E["kubeadm VM 배포<br/>스크립트 + Containerfile"]:::done
+    E --> F["CD 파이프라인<br/>(GitHub Actions 셀프호스티드 러너)"]:::progress
+    F --> G["#102<br/>user-server 정리 +<br/>사원 이벤트 실구현"]:::todo
+    G --> H["#104<br/>Post.employee<br/>ID 참조 전환"]:::todo
+```
 
 ### ✅ 완료
 - CORS 화이트리스트 적용, 연차 사용 동시성 제어, 근태(MAIN) SSE 알림, Swagger/OpenAPI 문서화, 사원 프로필 이미지 업로드, Post–User 연동 정리 — 초기 로드맵의 Phase 0~2 항목 전부
@@ -222,14 +236,16 @@ graph TB
 - **세션(Redis) → JWT(RS256) 인증 전환**([#98](https://github.com/chulgunhaza/chulgunhaza-backend/issues/98)) — [docs/jwt-authentication.md](docs/jwt-authentication.md), 애그리거트 경계 기준 정리 — [docs/aggregate-boundaries.md](docs/aggregate-boundaries.md)
 - **Gradle 멀티모듈 전환 + MySQL 스키마 분리**([#99](https://github.com/chulgunhaza/chulgunhaza-backend/issues/99)) — common/user-server/attendance-server(스켈레톤)/chatting-server(스켈레톤) 4개 모듈로 재구성, 스키마 `chulgunhaza_user`/`chulgunhaza_attendance`/`chulgunhaza_chatting` 분리. 자세한 내용은 [docs/multi-module-structure.md](docs/multi-module-structure.md)
 - **attendance-server 물리 분리**([#100](https://github.com/chulgunhaza/chulgunhaza-backend/issues/100)) — 근태 도메인 전체 이전, employeeNo/employeeName 비정규화, 클라이언트가 보낸 사번을 믿던 IDOR 수정, RabbitMQ 기반 교차 서비스 SSE 알림 파이프라인 구축. 자세한 내용은 [docs/attendance-server-migration.md](docs/attendance-server-migration.md)
+- **chatting-server 물리 분리 + Redis Pub/Sub 팬아웃**([#101](https://github.com/chulgunhaza/chulgunhaza-backend/issues/101)) — WebSocket 다중 인스턴스 팬아웃, user-server 내부 API로 사원 이름 조회, 채팅 알림 교차 서비스 파이프라인
+- **kubeadm VM 배포 + Containerfile** — Podman 기반 이미지 빌드, k8s Deployment/Service 매니페스트, `scripts/vm-deploy.sh`로 원샷 배포. 실제 VM에 배포해서 로그인/출근 등록/채팅까지 검증 완료. 자세한 내용은 [docs/kubeadm-vm-deployment.md](docs/kubeadm-vm-deployment.md)
 
 ### 🚧 남은 작업 (GitHub Issues로 트래킹 중)
 | 이슈 | 내용 |
 |---|---|
-| [#101](https://github.com/chulgunhaza/chulgunhaza-backend/issues/101) | chatting-server 물리 분리 + Redis Pub/Sub 팬아웃 |
+| (진행 중) | CD 파이프라인 — GitHub Actions 셀프호스티드 러너로 push 시 VM 자동 배포 |
 | [#102](https://github.com/chulgunhaza/chulgunhaza-backend/issues/102) | user-server 정리 + 사원 이벤트(EmployeeCreateEvent 등) 실구현 |
 | [#104](https://github.com/chulgunhaza/chulgunhaza-backend/issues/104) | Post.employee를 객체 참조 대신 Long employeeId로 전환 |
-| [#74](https://github.com/chulgunhaza/chulgunhaza-backend/issues/74), [#75](https://github.com/chulgunhaza/chulgunhaza-backend/issues/75) | 서비스 분리 로드맵 전체 (위 #101~#102의 상위 이슈) |
+| [#74](https://github.com/chulgunhaza/chulgunhaza-backend/issues/74), [#75](https://github.com/chulgunhaza/chulgunhaza-backend/issues/75) | 서비스 분리 로드맵 전체 (위 #102의 상위 이슈) |
 | [#63](https://github.com/chulgunhaza/chulgunhaza-backend/issues/63) | 나머지 서비스 계층(Post 등) TDD 테스트 확충 |
 | [#60](https://github.com/chulgunhaza/chulgunhaza-backend/issues/60) | HTTPS 적용 |
 | [#53](https://github.com/chulgunhaza/chulgunhaza-backend/issues/53) | 파일 업로드 S3 마이그레이션 |
@@ -238,7 +254,7 @@ graph TB
 | [#47](https://github.com/chulgunhaza/chulgunhaza-backend/issues/47) | Spring Batch 기반 출근 정산 |
 | [#56](https://github.com/chulgunhaza/chulgunhaza-backend/issues/56), [#57](https://github.com/chulgunhaza/chulgunhaza-backend/issues/57) | SseEmitter 타임아웃 조정, RabbitMQ 리스너 배치 처리 설계(읽음 처리) |
 
-우선순위 판단 기준은 대체로 "데이터 정합성/보안 > 관측 가능성 > 배포 인프라 > 스케일 검증" 순 — 예를 들어 부하 테스트(#50)나 DB 샤딩(#49)은 동시성 제어가 끝난 뒤, 모니터링이 갖춰진 뒤에 하는 게 의미가 있어서 뒤로 미뤄뒀습니다. 서비스 분리는 attendance(#99/#100, 완료) → chatting(#101) → user-server 정리(#102) 순으로 진행 중입니다(결합도가 가장 낮은 것부터).
+우선순위 판단 기준은 대체로 "데이터 정합성/보안 > 관측 가능성 > 배포 인프라 > 스케일 검증" 순 — 예를 들어 부하 테스트(#50)나 DB 샤딩(#49)은 동시성 제어가 끝난 뒤, 모니터링이 갖춰진 뒤에 하는 게 의미가 있어서 뒤로 미뤄뒀습니다. 서비스 분리는 attendance(#99/#100) → chatting(#101) 순으로 완료됐고, 지금은 그 위에 배포 자동화(VM 배포 → CD)를 쌓은 뒤 user-server 정리(#102)로 이어갈 예정입니다.
 
 ## 팀원 
 |임솔|김태동|
