@@ -85,11 +85,15 @@ echo ">>> 이미지 태그: $GIT_SHA"
 
 # 매 배포마다 태그를 새로 줘서(git short-sha) kubelet이 이미지를 확실히
 # 갱신하게 한다 — :latest 고정 태그는 캐시돼서 재배포해도 안 바뀔 수 있음.
+# --no-cache 필수: podman의 COPY 레이어 캐시가 git reset --hard 이후에도
+# 소스 변경을 못 잡아내서 이전 빌드 산출물을 그대로 재사용하는 걸 실측으로
+# 확인했다(프론트 디자인 변경을 배포했는데 옛 화면이 그대로 나옴) — 캐시를
+# 아예 꺼서 매번 확실히 최신 소스로 빌드되게 한다.
 build_and_import() {
   local name="$1" containerfile="$2" context="$3"
   shift 3
   echo ">>> $name 이미지 빌드"
-  podman build -t "localhost/${name}:${GIT_SHA}" -f "$containerfile" "$@" "$context"
+  podman build --no-cache -t "localhost/${name}:${GIT_SHA}" -f "$containerfile" "$@" "$context"
   podman save "localhost/${name}:${GIT_SHA}" -o "/tmp/${name}.tar"
   echo ">>> $name 이미지를 containerd로 import"
   sudo ctr -n k8s.io images import "/tmp/${name}.tar"
