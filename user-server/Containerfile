@@ -9,13 +9,13 @@
 # alpine 태그(17-jdk-alpine/17-jre-alpine)는 amd64 전용이라 arm64 VM/kubeadm
 # 노드에서 "no match for platform in manifest"로 빌드가 깨진다(실측 확인) —
 # 대신 멀티아키(amd64+arm64) 지원하는 Debian 기반 태그를 쓴다.
-FROM eclipse-temurin:17-jdk AS build
+FROM docker.io/library/eclipse-temurin:17-jdk AS build
 WORKDIR /workspace
 
 COPY . .
 RUN chmod +x gradlew && ./gradlew :user-server:bootJar --no-daemon -x test
 
-FROM eclipse-temurin:17-jre
+FROM docker.io/library/eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /workspace/user-server/build/libs/*.jar app.jar
 
