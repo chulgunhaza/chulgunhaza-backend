@@ -5,8 +5,50 @@ spring:
   application:
     name: chatting-server
 
+  datasource:
+    url: ${CHATTING_DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  # user-server의 compose.yaml이 띄운 RabbitMQ/Redis에 그대로 붙는다 — 이 모듈은
+  # spring-boot-docker-compose를 안 쓴다(#100에서 겪은 중복 컨테이너 이름 충돌 참고).
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: ${RMQ_USER}
+    password: ${RMQ_PASS}
+
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST}
+      password: ${SPRING_REDIS_PASS}
+      port: 6379
+
 management:
   endpoints:
     web:
       exposure:
         include: health
+
+# #98: JWT 검증 전용 — attendance-server와 마찬가지로 public key만 있으면 된다.
+jwt:
+  public-key: ${JWT_PUBLIC_KEY}
+  auth:
+    exempt-path-prefixes:
+      - /actuator
+
+# #54와 동일한 CORS 화이트리스트 계약(common의 AppCorsConfigurationSource가 읽음).
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+# #101: 다른 사원 이름/부서 조회(방 목록 표시), 사원 존재 검증에 사용.
+user-server:
+  internal-url: ${USER_SERVER_INTERNAL_URL:http://localhost:8081}

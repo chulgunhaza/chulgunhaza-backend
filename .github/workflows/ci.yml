@@ -52,6 +52,20 @@ jobs:
       DATABASE_URL: jdbc:mysql://127.0.0.1:3306/chulgunhaza_user?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
       DATABASE_USER: chulgunhaza
       DATABASE_PASSWORD: local1234
+      # #101: chatting-server의 ChatRoomServiceImplQueryCountTest가 실제 DB에 붙는
+      # @SpringBootTest라 별도 스키마가 필요하다. MYSQL_DATABASE는 컨테이너 기동
+      # 시 스키마를 하나만 만들어주므로, chulgunhaza_chatting은 아래 "Create
+      # additional schemas" 스텝에서 따로 만든다(로컬 .env의 CHATTING_DATABASE_URL과
+      # 동일한 계약).
+      CHATTING_DATABASE_URL: jdbc:mysql://127.0.0.1:3306/chulgunhaza_chatting?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
+      # #101: chatting-server/attendance-server는 (컨테이너 이름 충돌을 피하려고
+      # #100에서) spring-boot-docker-compose 대신 명시적 RMQ_USER/RMQ_PASS로 접속한다.
+      # user-server는 이 설정이 아예 없어서(스프링 기본값 guest/guest 그대로) 지금까지
+      # CI에서 안 드러났는데, chatting-server의 @SpringBootTest가 실제로 RabbitMQ
+      # 커넥션을 맺으면서 처음 노출됐다 — 아래 rabbitmq 서비스 컨테이너도 env 지정이
+      # 없어 기본 계정(guest/guest)이라 그대로 맞춘다.
+      RMQ_USER: guest
+      RMQ_PASS: guest
       SPRING_REDIS_HOST: 127.0.0.1
       SPRING_REDIS_PASS: ""
       UPLOAD_DIR: ./uploads
@@ -83,6 +97,18 @@ jobs:
             echo "waiting for mysql... ($i)"
             sleep 2
           done
+
+      # #101: chulgunhaza_user는 MYSQL_DATABASE로 컨테이너가 이미 만들어주지만,
+      # chulgunhaza_chatting은 chatting-server 전용 스키마라 여기서 따로 만들고
+      # chulgunhaza 유저에게 권한을 준다(chulgunhaza 유저는 기본적으로
+      # MYSQL_DATABASE 스키마에만 권한이 있음 — 공식 mysql 이미지 동작).
+      - name: Create additional schemas
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -uroot -proot -e "
+            CREATE DATABASE IF NOT EXISTS chulgunhaza_chatting;
+            GRANT ALL PRIVILEGES ON chulgunhaza_chatting.* TO 'chulgunhaza'@'%';
+            FLUSH PRIVILEGES;
+          "
 
       - name: Run tests
         run: ./gradlew clean test --no-daemon

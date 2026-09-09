@@ -1,10 +1,23 @@
-// #99/#101: 최소 부팅 스켈레톤. 도메인 코드(ChatRoom 등)와 데이터소스는
-// #101(chatting-server 물리 분리)에서 실제로 옮겨진다 — 지금은 "떠 있는지"만 증명.
+// #99/#101: 최소 스켈레톤에서 실제 채팅 도메인 서비스로.
 plugins {
     id 'org.springframework.boot'
 }
 
 dependencies {
+    implementation project(':common')
+
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    // #101: Redis Pub/Sub 기반 다중 인스턴스 팬아웃(ChatPresenceRegistry/ChatFanoutSubscriber)
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // ChatDeadLetterListener의 @Retryable/@Recover용
+    implementation 'org.springframework.retry:spring-retry'
+
+    runtimeOnly 'com.mysql:mysql-connector-j'
 }
